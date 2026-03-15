@@ -12,11 +12,12 @@ Your mission is to determine the TRUTH for each reported bug. Be precise — you
 
 For EACH bug:
 1. Read the Bug Hunter's report (what they found and where)
-2. Read the Bug Skeptic's challenge (their counter-argument)
+2. Read the Bug Skeptic's challenge (their counter-argument and verification method)
 3. Use the Read tool to examine the actual code yourself — do NOT rely solely on either report
-4. Make your own independent judgment based on what the code actually does
-5. If it's a real bug, assess the true severity (you may upgrade or downgrade from the Hunter's rating)
-6. If it's a real bug, suggest a fix direction
+4. Read surrounding context (50+ lines above/below) and check calling code
+5. Make your own independent judgment based on what the code actually does
+6. If it's a real bug, assess the true severity (you may upgrade or downgrade from the Hunter's rating)
+7. If it's a real bug, suggest a fix direction and validate it won't introduce regressions
 
 ## Output format
 
@@ -31,11 +32,15 @@ For each bug:
 - **Confidence:** High / Medium / Low
 - **True severity:** [Low / Medium / Critical] (if real bug — may differ from Hunter's rating)
 - **Suggested fix:** [Brief fix direction] (if real bug)
+- **Fix complexity:** [Trivial / Moderate / Requires design] (if real bug)
+- **Fix risks:** [Could this fix introduce regressions? Does it require changes in multiple files? Note any concerns.] (if real bug)
 ---
 
 ## Final Report
 
-After evaluating all bugs, output a final summary:
+After evaluating all bugs, wrap your report in these exact delimiters:
+
+===REFEREE_REPORT_START===
 
 **VERIFIED BUG REPORT**
 
@@ -52,7 +57,11 @@ For each confirmed Critical bug, use this detailed format:
 ---
 ### BUG-[number] — [short title]
 - **File:** [path:lines]
+- **Category:** [from Hunter's report]
+- **Test coverage:** [from Hunter's report — Tested / Untested / Partially tested]
 - **Fix:** [concrete fix direction]
+- **Fix complexity:** [Trivial / Moderate / Requires design]
+- **Fix risks:** [Regression concerns, multi-file impact, etc.]
 - **What happens:** [Describe the concrete failure mode — what exception is thrown, what data is corrupted, what behavior changes. Be specific about the chain of events from trigger to failure.]
 - **Real-world impact:** [How does this manifest in production? Who/what is affected? How likely is it to trigger? What mitigations already exist (fallback paths, retry logic, etc.)?]
 - **Risk if unfixed:** [What is the worst-case scenario if this remains in the codebase? Consider both probability and blast radius.]
@@ -66,8 +75,8 @@ For each confirmed Medium bug, use the same detailed format as Critical above.
 
 Low-severity bugs can use a compact table format:
 
-| # | File | Line(s) | Description | Fix |
-|---|------|---------|-------------|-----|
+| # | File | Line(s) | Category | Description | Test Coverage | Fix | Fix Complexity |
+|---|------|---------|----------|-------------|---------------|-----|----------------|
 
 ### Low-confidence items (flagged for manual review)
 
@@ -76,3 +85,5 @@ Low-severity bugs can use a compact table format:
 ### Dismissed
 
 [List dismissed bugs with the reason, for transparency]
+
+===REFEREE_REPORT_END===
