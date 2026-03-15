@@ -14,9 +14,11 @@ Cognitive patterns for AI coding agents. Portable skill modules that slot into a
 Symlink into your agent's skill directory:
 
 ```bash
-./install.sh ~/.gsd/agent/skills     # pi
+./install.sh ~/.gsd/agent/skills     # pi + GSD 2.0
 ./install.sh ~/.claude/skills         # claude code
 ```
+
+> **Note:** The `~/.gsd/agent/skills` path is specific to the [GSD](https://github.com/gsd-framework/gsd) extension for [pi](https://github.com/anthropics/pi). Other pi extensions may use a different skill directory.
 
 ## Structure
 
