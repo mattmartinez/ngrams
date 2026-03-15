@@ -113,6 +113,10 @@ def download_data(num_shards, download_workers=8):
 
     ok = sum(1 for r in results if r)
     print(f"Data: {ok}/{len(ids)} shards ready at {DATA_DIR}")
+    if ok < len(ids):
+        failed = len(ids) - ok
+        print(f"ERROR: {failed} shard(s) failed to download after retries.")
+        sys.exit(1)
 
 # ---------------------------------------------------------------------------
 # Tokenizer training
@@ -219,14 +223,21 @@ def train_tokenizer():
 
     # --- Build token_bytes lookup for BPB evaluation ---
     print("Tokenizer: building token_bytes lookup...")
-    special_set = set(SPECIAL_TOKENS)
+    # Build reverse lookup: token_id -> raw byte length.
+    # We use the raw token bytes from mergeable_ranks directly instead of
+    # roundtripping through decode() + encode("utf-8"), which corrupts byte
+    # lengths for partial-UTF-8 tokens (e.g. lone continuation bytes decode
+    # to U+FFFD replacement char = 3 UTF-8 bytes instead of the true 1 byte).
+    id_to_raw_bytes = {rank: token for token, rank in mergeable_ranks.items()}
+    special_ids = set(special_tokens.values())
     token_bytes_list = []
     for token_id in range(enc.n_vocab):
-        token_str = enc.decode([token_id])
-        if token_str in special_set:
+        if token_id in special_ids:
             token_bytes_list.append(0)
+        elif token_id in id_to_raw_bytes:
+            token_bytes_list.append(len(id_to_raw_bytes[token_id]))
         else:
-            token_bytes_list.append(len(token_str.encode("utf-8")))
+            token_bytes_list.append(0)  # unknown token, exclude from BPB
     token_bytes_tensor = torch.tensor(token_bytes_list, dtype=torch.int32)
     torch.save(token_bytes_tensor, token_bytes_path)
     print(f"Tokenizer: saved token_bytes to {token_bytes_path}")
