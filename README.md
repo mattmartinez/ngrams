@@ -2,6 +2,12 @@
 
 Cognitive patterns for AI coding agents. Portable skill modules that slot into any agent harness — specialized knowledge, encoded once, loaded on demand.
 
+## Projects
+
+| Project | Purpose |
+|---|---|
+| **[autoresearch](autoresearch/)** | Autonomous LLM training research agent. Fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch) with 21 cherry-picked community improvements (security, observability, robustness, agent strategy). |
+
 ## Skills
 
 | Skill | Purpose |
