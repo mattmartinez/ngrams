@@ -133,10 +133,18 @@ Note: cmux browser is WebKit-based (not Chromium) — behavior may differ from P
 2. **Scope to the current workspace.** Use `--workspace $CMUX_WORKSPACE_ID` on all workspace-scoped operations.
 3. **Capture and report surface IDs.** When creating splits or workspaces, tell the user the new surface/workspace ID so they can reference it later.
 4. **Clean up on failure.** If a split or workspace creation fails, report the error clearly. Do not leave orphaned surfaces.
-5. **Chain commands when logical.** If the user says "split right and run tests", create the split and then send the test command to it:
+5. **Always cd into the project root in new splits.** New terminal splits open in a default directory, NOT the current working directory. Before sending any command to a newly created split, first send a `cd <project-root>` command. Use the current working directory (`pwd`) as the project root unless the user specifies otherwise:
    ```bash
-   SURFACE_ID=$(cmux new-split right --json | jq -r '.surface_id')
-   cmux send-surface --surface "$SURFACE_ID" "npm test"
+   cmux send --surface "$SURFACE_ID" "cd /path/to/project"
+   cmux send-key --surface "$SURFACE_ID" enter
+   ```
+6. **Chain commands when logical.** If the user says "split right and run tests", create the split, cd into the project root, and then send the command:
+   ```bash
+   SURFACE_ID=$(cmux new-split right | grep -oE 'surface:\d+')
+   cmux send --surface "$SURFACE_ID" "cd /path/to/project"
+   cmux send-key --surface "$SURFACE_ID" enter
+   cmux send --surface "$SURFACE_ID" "npm test"
+   cmux send-key --surface "$SURFACE_ID" enter
    ```
 6. **Combine with notifications.** If the user asks to run something and be notified when done, set up the command in a split and add a notification at the end:
    ```bash
@@ -161,13 +169,20 @@ When the user wants to run parallel agents or commands in visible splits:
 
 ```bash
 # Example: run 3 parallel tasks in splits
-S1=$(cmux new-split right --json | jq -r '.surface_id')
-S2=$(cmux new-split down --json | jq -r '.surface_id')
-S3=$(cmux new-split down --json | jq -r '.surface_id')
+PROJECT_ROOT=$(pwd)
+S1=$(cmux new-split right | grep -oE 'surface:[0-9]+')
+S2=$(cmux new-split down | grep -oE 'surface:[0-9]+')
+S3=$(cmux new-split down | grep -oE 'surface:[0-9]+')
 
-cmux send-surface --surface "$S1" "npm run lint"
-cmux send-surface --surface "$S2" "npm test"
-cmux send-surface --surface "$S3" "npm run build"
+# cd into project root in each split before running commands
+for S in "$S1" "$S2" "$S3"; do
+  cmux send --surface "$S" "cd $PROJECT_ROOT"
+  cmux send-key --surface "$S" enter
+done
+
+cmux send --surface "$S1" "npm run lint" && cmux send-key --surface "$S1" enter
+cmux send --surface "$S2" "npm test" && cmux send-key --surface "$S2" enter
+cmux send --surface "$S3" "npm run build" && cmux send-key --surface "$S3" enter
 
 cmux set-status parallel "3 tasks running" --icon rocket --workspace $CMUX_WORKSPACE_ID
 ```
