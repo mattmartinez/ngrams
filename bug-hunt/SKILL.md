@@ -46,6 +46,31 @@ Read these prompt files from the skill directory:
 - `~/.gsd/agent/skills/bug-hunt/prompts/skeptic.md`
 - `~/.gsd/agent/skills/bug-hunt/prompts/referee.md`
 
+### Step 1.1: Load profile (if present)
+
+Search for a `.bug-hunt-profile.md` file by walking up from the scan target directory:
+
+```bash
+dir="[target]"
+while [ "$dir" != "/" ]; do
+  if [ -f "$dir/.bug-hunt-profile.md" ]; then
+    echo "Found profile: $dir/.bug-hunt-profile.md"
+    break
+  fi
+  dir="$(dirname "$dir")"
+done
+```
+
+If found, read the profile file. The profile contains:
+- **Severity overrides** — domain-specific escalations (e.g., "hardcoded secrets → Critical" in financial services)
+- **Domain-specific checks** — additional checklist items the generic prompt doesn't cover
+
+**How to apply the profile:**
+- Prepend the profile's severity overrides to the Hunter's task (BEFORE the generic severity calibration — profile overrides take precedence)
+- Prepend the profile's severity overrides to the Referee's task as well
+- Append the profile's domain-specific checks to the Hunter's task (AFTER the generic checklist)
+- If no profile is found, proceed with the generic prompts only
+
 ### Step 1.5: Scope assessment and stack detection
 
 **Resolve the target file list:**
