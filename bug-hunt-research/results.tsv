@@ -1,0 +1,9 @@
+commit	composite	f1	recall	precision	trap_resistance	description
+7ec5569	0.687500	0.9375	0.9375	0.9375	1.0000	baseline
+eda8af4	0.709677	0.9032	0.8750	0.9333	1.0000	experiment 1: severity calibration examples in hunter
+c57645a	0.750000	0.9375	0.9375	0.9375	1.0000	experiment 2: severity calibration in referee
+3dedee8	1.000000	1.0000	1.0000	1.0000	1.0000	experiment 3: severity calibration + structured Low format
+4b6ff03	0.967742	0.9677	0.9375	1.0000	1.0000	experiment 4: auth line-number guidance in hunter
+324549a	1.000000	1.0000	1.0000	1.0000	1.0000	experiment 5: Unicode confusable + unused import checks
+f46d64c	1.000000	1.0000	1.0000	1.0000	1.0000
+324549a	1.000000	1.0000	1.0000	1.0000	1.0000	validation run 2: perfect again
