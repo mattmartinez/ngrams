@@ -13,6 +13,7 @@ Cognitive patterns for AI coding agents. Portable skill modules that slot into a
 | Skill | Purpose |
 |---|---|
 | **bug-hunt** | Adversarial 3-agent bug sweep (Hunter → Skeptic → Referee) |
+| **bug-hunt-research** | Autonomous prompt optimization loop for bug-hunt. Runs bug-hunt against benchmark codebases with planted bugs & traps, scores results, keeps or reverts prompt changes. Modeled on autoresearch. |
 | **cmux** | Claude Code integration with cmux terminal multiplexer — splits, workspaces, sidebar, notifications |
 | **mdthis** | Generate markdown artifacts from conversation context |
 | **slidedeck** | Build polished, self-contained HTML slide deck presentations from source material |
