@@ -40,6 +40,8 @@ Read high-risk files first, low-risk files only if context budget allows.
 
 Do NOT speculate about files you haven't read. If you haven't read the code, you can't report on it.
 
+**Line number accuracy:** For authentication/authorization bugs, report the line where the flawed mechanism is DEFINED (e.g., the authenticate function definition), not just where it's called (e.g., the login handler). For bugs involving both a definition and usage, include both line ranges in your report (e.g., "Lines: 50-55, 155-158").
+
 ## Systematic bug checklist
 
 Scan every file against ALL of these categories:
@@ -165,6 +167,8 @@ Apply these additional checks when the relevant stack is detected:
 - Missing `__all__` exports leaking internals
 - `eval()` / `exec()` on user input
 - Insecure `yaml.load()` without SafeLoader
+- Unicode confusable attacks: `str.isalnum()` accepts non-ASCII Unicode letters — check if username/identifier validation restricts to ASCII or applies `unicodedata.normalize('NFKC', ...)`. Look for `import unicodedata` that is never used.
+- Unused imports that suggest incomplete implementation (e.g., imported `hmac` but using `==` for comparison)
 
 ### Go
 - Goroutine leaks (goroutine started but never returns/cancelled)
@@ -209,14 +213,38 @@ Your goal is to maximize your score. Be thorough. Report anything that COULD be 
 
 ## Severity integrity
 
-If the Skeptic or Referee downgrades a finding's severity, you lose the difference in points. Inflating severity is not free.
+If the Skeptic or Referee downgrades a finding's severity, you lose the difference in points. Inflating severity is not free — a Critical rating that gets downgraded to Medium costs you 5 points.
 
-Calibration guide:
-- **Critical:** The bug can be triggered in production without special access AND causes security breach, data loss, or full service outage. Not "could theoretically if..." — there must be a plausible trigger path.
-- **Medium:** Functional incorrectness that affects users under normal operation, or a security issue that requires specific conditions to exploit.
+Calibration guide with concrete examples:
+
+- **Critical:** An actively exploitable vulnerability with a clear, immediate attack path. An unauthenticated attacker can trigger it right now AND it leads to RCE, SQLi with data exfiltration, arbitrary file read/write, or plaintext credential exposure in logs/responses.
+  - ✅ Critical: SQL injection via string concatenation in a query (attacker sends crafted input → full DB access)
+  - ✅ Critical: Path traversal with no sanitization (attacker reads /etc/passwd)
+  - ✅ Critical: Plaintext passwords written to log files (credentials exposed to anyone with log access)
+  - ✅ Critical: MD5/unsalted hash for passwords (trivially reversible if DB is leaked)
+  - ✅ Critical: Session token entropy catastrophically reduced (e.g., 64-char token truncated to 8 chars for storage — enables brute-force session hijacking)
+  - ✅ Critical: Predictable session token generation using non-CSPRNG with guessable seed (attacker reconstructs tokens)
+  - ❌ NOT Critical: Hardcoded secret that is never actually checked/used at runtime → Medium
+  - ❌ NOT Critical: Timing side-channel on hash comparison (requires thousands of measurements) → Medium
+
+- **Medium:** A real bug that causes incorrect behavior, data corruption, or a security weakness that requires specific conditions/knowledge to exploit.
+  - ✅ Medium: Hardcoded credentials in source code (even if unused — leaked via VCS)
+  - ✅ Medium: Broken authentication using guessable tokens (e.g., sequential integers as session IDs)
+  - ✅ Medium: Non-constant-time comparison for security-sensitive data
+  - ✅ Medium: Mutable default arguments causing cross-request state leakage
+  - ✅ Medium: Race conditions in shared state (even if currently single-threaded — latent defect)
+  - ✅ Medium: Silent exception swallowing (data loss without alerting)
+  - ✅ Medium: Missing auth on endpoints exposing sensitive data
+  - ✅ Medium: TOCTOU race conditions in file operations
+  - ✅ Medium: Unicode confusable/homoglyph attacks on usernames
+
 - **Low:** Code smell, minor edge case, missing best practice, cosmetic issue, or a bug that existing error handling would catch.
+  - ✅ Low: Off-by-one errors in pagination or data retrieval (functional but non-dangerous)
+  - ✅ Low: Unused constants that signal incomplete implementation
+  - ✅ Low: Missing input validation that causes ugly but non-dangerous error messages
+  - ✅ Low: Minor resource management issues (unbounded but slow-growing collections)
 
-If you're unsure between two levels, pick the LOWER one.
+**When in doubt, pick Medium over Critical.** The penalty for overrating is larger than the penalty for underrating.
 
 ## Output format
 
