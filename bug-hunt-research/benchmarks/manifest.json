@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "description": "Bug-hunt benchmark manifest v1. Contains planted bugs across 4 difficulty tiers and false-positive traps. Ground truth for scoring.",
+
+  "bugs": [
+    {
+      "id": "PLANTED-01",
+      "file": "easy/vuln_api_server.py",
+      "line_start": 97,
+      "line_end": 97,
+      "difficulty": "easy",
+      "severity": "Critical",
+      "category": "security",
+      "description": "SQL injection in handle_list_users — the search parameter is interpolated directly into the query string via f-string, allowing arbitrary SQL execution."
+    },
+    {
+      "id": "PLANTED-02",
+      "file": "easy/vuln_api_server.py",
+      "line_start": 48,
+      "line_end": 48,
+      "difficulty": "easy",
+      "severity": "Critical",
+      "category": "security",
+      "description": "MD5 used for password hashing — MD5 is cryptographically broken for password storage. Should use bcrypt/scrypt/argon2."
+    },
+    {
+      "id": "PLANTED-03",
+      "file": "easy/vuln_api_server.py",
+      "line_start": 128,
+      "line_end": 131,
+      "difficulty": "easy",
+      "severity": "Critical",
+      "category": "security",
+      "description": "Plaintext password logged — logger.info includes the raw password in the log message."
+    },
+    {
+      "id": "PLANTED-04",
+      "file": "easy/vuln_api_server.py",
+      "line_start": 18,
+      "line_end": 18,
+      "difficulty": "easy",
+      "severity": "Medium",
+      "category": "security",
+      "description": "Hardcoded admin token in source code — ADMIN_TOKEN is a secret committed to the codebase."
+    },
+    {
+      "id": "PLANTED-05",
+      "file": "easy/vuln_api_server.py",
+      "line_start": 170,
+      "line_end": 174,
+      "difficulty": "easy",
+      "severity": "Critical",
+      "category": "security",
+      "description": "Path traversal in handle_file_download — filename from URL is joined directly to 'uploads' dir with no sanitization. An attacker can use '../' to read arbitrary files."
+    },
+    {
+      "id": "PLANTED-06",
+      "file": "easy/vuln_api_server.py",
+      "line_start": 161,
+      "line_end": 165,
+      "difficulty": "easy",
+      "severity": "Medium",
+      "category": "security",
+      "description": "Admin export endpoint has no authentication check — /api/admin/export returns all user data including password hashes to anyone."
+    },
+    {
+      "id": "PLANTED-07",
+      "file": "easy/vuln_api_server.py",
+      "line_start": 50,
+      "line_end": 55,
+      "difficulty": "easy",
+      "severity": "Medium",
+      "category": "security",
+      "description": "Broken authentication — authenticate() uses the raw token as a user ID for database lookup. Tokens returned by login are just user IDs (integers), making session impersonation trivial by guessing sequential IDs."
+    },
+
+    {
+      "id": "PLANTED-08",
+      "file": "medium/data_pipeline.py",
+      "line_start": 31,
+      "line_end": 35,
+      "difficulty": "medium",
+      "severity": "Medium",
+      "category": "concurrency",
+      "description": "Race condition in PipelineStats — increment_ingested and increment_failed mutate shared state without acquiring self.lock. The lock field exists but is never used."
+    },
+    {
+      "id": "PLANTED-09",
+      "file": "medium/data_pipeline.py",
+      "line_start": 93,
+      "line_end": 94,
+      "difficulty": "medium",
+      "severity": "Low",
+      "category": "logic",
+      "description": "Off-by-one in DataStore.query — uses [start:end] where end = start + page_size - 1, which returns page_size - 1 items instead of page_size. Should be start + page_size."
+    },
+    {
+      "id": "PLANTED-10",
+      "file": "medium/data_pipeline.py",
+      "line_start": 125,
+      "line_end": 128,
+      "difficulty": "medium",
+      "severity": "Medium",
+      "category": "error-handling",
+      "description": "Silent exception swallowing in process_file — bare 'except Exception: pass' hides all errors including data corruption, permission issues, and encoding failures. Files may silently fail to process."
+    },
+    {
+      "id": "PLANTED-11",
+      "file": "medium/data_pipeline.py",
+      "line_start": 134,
+      "line_end": 141,
+      "difficulty": "medium",
+      "severity": "Medium",
+      "category": "data-integrity",
+      "description": "Archive race condition — the check-then-rename pattern (if not dest.exists → rename) is vulnerable to TOCTOU race conditions. Two concurrent pipeline instances could collide."
+    },
+
+    {
+      "id": "PLANTED-12",
+      "file": "hard/auth_session.py",
+      "line_start": 68,
+      "line_end": 68,
+      "difficulty": "hard",
+      "severity": "Critical",
+      "category": "security",
+      "description": "Session token truncated to 8 chars for storage key — SessionStore uses token[:8] as the dict key. A 64-char token is reduced to 8 chars of entropy from a 36-char alphabet (≈41 bits). This enables collision attacks and brute-force session hijacking."
+    },
+    {
+      "id": "PLANTED-13",
+      "file": "hard/auth_session.py",
+      "line_start": 112,
+      "line_end": 116,
+      "difficulty": "hard",
+      "severity": "Critical",
+      "category": "security",
+      "description": "Predictable session tokens — generate_session_token seeds Python's random module with deterministic material (time + user_id + pid). An attacker who knows the approximate login time can reconstruct the token. Should use secrets.token_hex()."
+    },
+    {
+      "id": "PLANTED-14",
+      "file": "hard/auth_session.py",
+      "line_start": 102,
+      "line_end": 104,
+      "difficulty": "hard",
+      "severity": "Medium",
+      "category": "security",
+      "description": "Non-constant-time password comparison — verify_password uses == instead of hmac.compare_digest, enabling timing attacks to recover password hashes character by character."
+    },
+    {
+      "id": "PLANTED-15",
+      "file": "hard/auth_session.py",
+      "line_start": 244,
+      "line_end": 244,
+      "difficulty": "hard",
+      "severity": "Medium",
+      "category": "logic",
+      "description": "Mutable default argument — process_request uses context: dict = {} which shares a single dict across all calls, causing cross-request cache pollution. Classic Python gotcha."
+    },
+    {
+      "id": "PLANTED-16",
+      "file": "hard/auth_session.py",
+      "line_start": 120,
+      "line_end": 121,
+      "difficulty": "hard",
+      "severity": "Medium",
+      "category": "security",
+      "description": "normalize_username allows Unicode confusable attacks — only checks isalnum() which passes Unicode letters. An attacker could register a visually identical username using Cyrillic or other lookalike characters. Should restrict to ASCII or apply NFKC normalization."
+    }
+  ],
+
+  "traps": [
+    {
+      "id": "TRAP-01",
+      "file": "traps/safe_but_suspicious.py",
+      "line_start": 34,
+      "line_end": 34,
+      "category": "security",
+      "description": "getattr on user input — LOOKS dangerous but the whitelist check on line 28 (frozenset membership test) ensures only safe str methods are called. This is a false positive trap."
+    },
+    {
+      "id": "TRAP-02",
+      "file": "traps/safe_but_suspicious.py",
+      "line_start": 46,
+      "line_end": 68,
+      "category": "logic",
+      "description": "process_order appears to have an unbound variable 'result' — but all branches of the if/elif/else chain assign result before use. Complete coverage. Not a bug."
+    },
+    {
+      "id": "TRAP-03",
+      "file": "traps/safe_but_suspicious.py",
+      "line_start": 116,
+      "line_end": 120,
+      "category": "security",
+      "description": "time.sleep looks like a timing oracle — but it's actually constant-time padding (pads UP to 500ms) which is a correct timing-attack mitigation. Not a vulnerability."
+    },
+    {
+      "id": "TRAP-04",
+      "file": "traps/safe_but_suspicious.py",
+      "line_start": 130,
+      "line_end": 153,
+      "category": "security",
+      "description": "Hardcoded default signing key — LOOKS dangerous but the code raises RuntimeError in production (line 146), only falls back to test key in dev/CI. There's also an env var override. This is intentional defense-in-depth."
+    },
+    {
+      "id": "TRAP-05",
+      "file": "traps/safe_but_suspicious.py",
+      "line_start": 196,
+      "line_end": 204,
+      "category": "error-handling",
+      "description": "Broad except clause — LOOKS like exception swallowing but the error is logged with full traceback (exc_info=True) and re-raised as a specific RuntimeError with 'from e' chain. This is a legitimate error-handling pattern for external service wrappers."
+    }
+  ]
+}
