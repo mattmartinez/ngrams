@@ -109,9 +109,15 @@ printf '\e]777;notify;%s;%s\a' "Title" "Body"
 
 Open and interact with cmux's embedded WebKit browser.
 
+**Placement:** `cmux browser open-split` may open as a tab, not a split. To place a browser in a specific location, first focus the target pane, then use `cmux new-pane --type browser --direction <dir> --url <url>`:
+```bash
+cmux focus-pane --pane <target-pane> --workspace $CMUX_WORKSPACE_ID
+cmux new-pane --type browser --direction down --workspace $CMUX_WORKSPACE_ID --url <url>
+```
+
 | User says | Command |
 |-----------|---------|
-| open browser / browse URL | `cmux browser open-split <url>` |
+| open browser / browse URL | `cmux new-pane --type browser --direction down --url <url>` (focus target pane first) |
 | screenshot / capture page | `cmux browser surface:<id> screenshot --out <path>` |
 | snapshot / get page content | `cmux browser surface:<id> snapshot --interactive --compact` |
 | wait for page load | `cmux browser surface:<id> wait --load-state complete` |
