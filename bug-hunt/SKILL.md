@@ -73,27 +73,29 @@ If found, read the profile file. The profile contains:
 
 ### Step 1.2: Ensure production branch
 
-If the scan target is inside a git repository, verify it is on the production branch before scanning:
+Before scanning any code, ensure all git repositories under the target are on their production branch (main or master). This applies whether the target is a single repo or a directory containing multiple repos.
 
 ```bash
-cd [target]
-if git rev-parse --git-dir > /dev/null 2>&1; then
-  current=$(git branch --show-current)
-  if git show-ref --verify --quiet refs/heads/main; then
+# Find all git repos at or under the target
+find [target] -name .git -type d -maxdepth 3 | while read gitdir; do
+  repo=$(dirname "$gitdir")
+  cd "$repo"
+  current=$(git branch --show-current 2>/dev/null)
+  if git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
     prod_branch="main"
-  elif git show-ref --verify --quiet refs/heads/master; then
+  elif git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
     prod_branch="master"
   else
     prod_branch="$current"
   fi
   if [ "$current" != "$prod_branch" ]; then
-    echo "WARNING: Target is on branch '$current', not '$prod_branch'. Switching to $prod_branch."
-    git checkout "$prod_branch"
+    echo "Switching $(basename $repo): $current → $prod_branch"
+    git checkout "$prod_branch" --quiet
   fi
-fi
+done
 ```
 
-Bug-hunt scans what is deployed in production. Always scan main/master unless the user explicitly passes `--diff` or `--commit` to target a specific branch.
+Bug-hunt scans what is deployed in production. Always switch to main/master before reading code, unless the user explicitly passes `--diff` or `--commit` to target a specific branch.
 
 ### Step 1.5: Scope assessment and stack detection
 
