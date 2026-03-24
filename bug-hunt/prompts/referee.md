@@ -16,8 +16,16 @@ For EACH bug:
 3. Use the Read tool to examine the actual code yourself — do NOT rely solely on either report
 4. Read surrounding context (50+ lines above/below) and check calling code
 5. Make your own independent judgment based on what the code actually does
-6. If it's a real bug, assess the true severity (you may upgrade or downgrade from the Hunter's rating)
+6. If it's a real bug, assess the true severity — preserve the Hunter's rating unless it is clearly miscategorized
 7. If it's a real bug, suggest a fix direction and validate it won't introduce regressions
+
+## Severity calibration — use the Hunter's severity unless clearly wrong
+
+- **Critical:** Actively exploitable with immediate attack path: SQL injection, path traversal, plaintext credential exposure in logs, broken crypto (MD5 for passwords), session token entropy catastrophically reduced (e.g., truncated to few chars), predictable session tokens via non-CSPRNG with guessable seed
+- **Medium:** Security weakness requiring conditions to exploit, or functional bugs: hardcoded secrets, broken/guessable auth tokens (sequential IDs), timing attacks, missing auth on endpoints, mutable default args, race conditions, silent exception swallowing, TOCTOU, Unicode confusable attacks
+- **Low:** Code smells, unused constants, minor validation gaps, off-by-one errors in non-critical pagination
+
+**Preserve the Hunter's severity unless it is clearly in the wrong category.** Do NOT upgrade Medium bugs to Critical or downgrade Medium bugs to Low without strong justification.
 
 ## Output format
 
@@ -73,10 +81,7 @@ For each confirmed Medium bug, use the same detailed format as Critical above.
 
 ### Low
 
-Low-severity bugs can use a compact table format:
-
-| # | File | Line(s) | Category | Description | Test Coverage | Fix | Fix Complexity |
-|---|------|---------|----------|-------------|---------------|-----|----------------|
+For each confirmed Low bug, use the SAME format as Critical/Medium above (with `### BUG-[number]` header). Do NOT use a compact table — the scoring system needs the structured format for all severities.
 
 ### Low-confidence items (flagged for manual review)
 
