@@ -71,6 +71,30 @@ If found, read the profile file. The profile contains:
 - Append the profile's domain-specific checks to the Hunter's task (AFTER the generic checklist)
 - If no profile is found, proceed with the generic prompts only
 
+### Step 1.2: Ensure production branch
+
+If the scan target is inside a git repository, verify it is on the production branch before scanning:
+
+```bash
+cd [target]
+if git rev-parse --git-dir > /dev/null 2>&1; then
+  current=$(git branch --show-current)
+  if git show-ref --verify --quiet refs/heads/main; then
+    prod_branch="main"
+  elif git show-ref --verify --quiet refs/heads/master; then
+    prod_branch="master"
+  else
+    prod_branch="$current"
+  fi
+  if [ "$current" != "$prod_branch" ]; then
+    echo "WARNING: Target is on branch '$current', not '$prod_branch'. Switching to $prod_branch."
+    git checkout "$prod_branch"
+  fi
+fi
+```
+
+Bug-hunt scans what is deployed in production. Always scan main/master unless the user explicitly passes `--diff` or `--commit` to target a specific branch.
+
 ### Step 1.5: Scope assessment and stack detection
 
 **Resolve the target file list:**
