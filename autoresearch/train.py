@@ -412,6 +412,9 @@ class MuonAdamW(torch.optim.Optimizer):
             state_shape = (num_params, shape[-2], 1) if shape[-2] >= shape[-1] else (num_params, 1, shape[-1])
             state["second_momentum_buffer"] = torch.zeros(state_shape, dtype=dtype, device=device)
         red_dim = -1 if shape[-2] >= shape[-1] else -2
+        params = [p for p in params if p.grad is not None]
+        if not params:
+            return
         stacked_grads = torch.stack([p.grad for p in params])
         stacked_params = torch.stack(params)
         self._muon_momentum_t.fill_(group["momentum"])
@@ -422,7 +425,8 @@ class MuonAdamW(torch.optim.Optimizer):
                         state["momentum_buffer"], state["second_momentum_buffer"],
                         self._muon_momentum_t, self._muon_lr_t, self._muon_wd_t,
                         self._muon_beta2_t, group["ns_steps"], red_dim)
-        torch._foreach_copy_(params, list(stacked_params.unbind(0)))
+        for p, s in zip(params, stacked_params.unbind(0)):
+            p.copy_(s)
 
     @torch.no_grad()
     def step(self):
@@ -485,6 +489,8 @@ _GPU_BF16_PEAK_FLOPS = {
     (7, 0): 125e12,    # V100 SXM2 (FP16 tensor)
 }
 _cap = torch.cuda.get_device_capability()
+if _cap not in _GPU_BF16_PEAK_FLOPS:
+    print(f"Warning: Unknown GPU compute capability {_cap}, MFU will use H100 peak FLOPS as default")
 GPU_PEAK_FLOPS = _GPU_BF16_PEAK_FLOPS.get(_cap, 989.5e12)
 
 tokenizer = Tokenizer.from_directory()
@@ -548,7 +554,7 @@ def get_lr_multiplier(progress):
     elif progress < 1.0 - WARMDOWN_RATIO:
         return 1.0
     else:
-        cooldown = (1.0 - progress) / WARMDOWN_RATIO
+        cooldown = (1.0 - progress) / WARMDOWN_RATIO if WARMDOWN_RATIO > 0 else 0.0
         return cooldown * 1.0 + (1 - cooldown) * FINAL_LR_FRAC
 
 def get_muon_momentum(step):
@@ -636,7 +642,10 @@ print()  # newline after \r training log
 total_tokens = step * TOTAL_BATCH_SIZE
 
 # Save checkpoint before eval so training isn't lost if eval crashes (PR #265)
-torch.save(model.state_dict(), "checkpoint.pt")
+try:
+    torch.save(model.state_dict(), "checkpoint.pt")
+except OSError as e:
+    print(f"Warning: Failed to save checkpoint: {e}")
 
 # Final eval
 model.eval()
