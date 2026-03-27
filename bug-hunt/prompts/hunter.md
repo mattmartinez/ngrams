@@ -204,47 +204,20 @@ Apply these additional checks when the relevant stack is detected:
 
 ## Scoring
 
-You are being scored on how many real issues you find:
-- +1 point: Low impact (minor issues, edge cases, cosmetic problems, code smells)
-- +5 points: Medium impact (functional issues, data inconsistencies, performance problems, missing validation)
-- +10 points: Critical impact (security vulnerabilities, data loss risks, race conditions, system crashes)
-
-Your goal is to maximize your score. Be thorough. Report anything that COULD be a problem — a false positive costs you nothing, but missing a real bug means lost points.
+You are being scored. +10 Critical, +5 Medium, +1 Low. Maximize your score. A false positive costs nothing, but a missed bug is lost points.
 
 ## Severity integrity
 
-If the Skeptic or Referee downgrades a finding's severity, you lose the difference in points. Inflating severity is not free — a Critical rating that gets downgraded to Medium costs you 5 points.
+Inflating severity is penalized. A Critical downgraded to Medium costs you 5 points.
 
-Calibration guide with concrete examples:
+- **Critical:** Actively exploitable with immediate attack path: SQL injection, path traversal with no sanitization, plaintext passwords in logs, MD5/unsalted password hashing, session token entropy catastrophically reduced (e.g., 64-char token truncated to 8 chars), predictable session tokens via non-CSPRNG with guessable seed.
+  - ❌ NOT Critical: Hardcoded secret unused at runtime → Medium. Timing side-channel → Medium.
 
-- **Critical:** An actively exploitable vulnerability with a clear, immediate attack path. An unauthenticated attacker can trigger it right now AND it leads to RCE, SQLi with data exfiltration, arbitrary file read/write, or plaintext credential exposure in logs/responses.
-  - ✅ Critical: SQL injection via string concatenation in a query (attacker sends crafted input → full DB access)
-  - ✅ Critical: Path traversal with no sanitization (attacker reads /etc/passwd)
-  - ✅ Critical: Plaintext passwords written to log files (credentials exposed to anyone with log access)
-  - ✅ Critical: MD5/unsalted hash for passwords (trivially reversible if DB is leaked)
-  - ✅ Critical: Session token entropy catastrophically reduced (e.g., 64-char token truncated to 8 chars for storage — enables brute-force session hijacking)
-  - ✅ Critical: Predictable session token generation using non-CSPRNG with guessable seed (attacker reconstructs tokens)
-  - ❌ NOT Critical: Hardcoded secret that is never actually checked/used at runtime → Medium
-  - ❌ NOT Critical: Timing side-channel on hash comparison (requires thousands of measurements) → Medium
+- **Medium:** Security weakness requiring conditions to exploit, or functional bugs: hardcoded credentials (even if unused — leaked via VCS), sequential/guessable auth tokens, non-constant-time comparison, mutable default arguments, race conditions, silent exception swallowing, missing auth on endpoints, TOCTOU, Unicode confusable attacks.
 
-- **Medium:** A real bug that causes incorrect behavior, data corruption, or a security weakness that requires specific conditions/knowledge to exploit.
-  - ✅ Medium: Hardcoded credentials in source code (even if unused — leaked via VCS)
-  - ✅ Medium: Broken authentication using guessable tokens (e.g., sequential integers as session IDs)
-  - ✅ Medium: Non-constant-time comparison for security-sensitive data
-  - ✅ Medium: Mutable default arguments causing cross-request state leakage
-  - ✅ Medium: Race conditions in shared state (even if currently single-threaded — latent defect)
-  - ✅ Medium: Silent exception swallowing (data loss without alerting)
-  - ✅ Medium: Missing auth on endpoints exposing sensitive data
-  - ✅ Medium: TOCTOU race conditions in file operations
-  - ✅ Medium: Unicode confusable/homoglyph attacks on usernames
+- **Low:** Code smells, off-by-one in pagination, minor edge cases, cosmetic issues.
 
-- **Low:** Code smell, minor edge case, missing best practice, cosmetic issue, or a bug that existing error handling would catch.
-  - ✅ Low: Off-by-one errors in pagination or data retrieval (functional but non-dangerous)
-  - ✅ Low: Unused constants that signal incomplete implementation
-  - ✅ Low: Missing input validation that causes ugly but non-dangerous error messages
-  - ✅ Low: Minor resource management issues (unbounded but slow-growing collections)
-
-**When in doubt, pick Medium over Critical.** The penalty for overrating is larger than the penalty for underrating.
+**When in doubt, pick Medium over Critical.**
 
 ## Output format
 
