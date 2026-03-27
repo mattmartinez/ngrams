@@ -286,23 +286,25 @@ async function cmdSearch(args) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-const [,, command, ...rest] = process.argv;
+if (require.main === module) {
+  const [,, command, ...rest] = process.argv;
 
-(async () => {
-  switch (command) {
-    case 'whoami':         await cmdWhoami();          break;
-    case 'list-projects':  await cmdListProjects();     break;
-    case 'create':         await cmdCreate(rest);       break;
-    case 'search':         await cmdSearch(rest);       break;
-    default:
-      console.error(`Unknown command: ${command || '(none)'}`);
-      console.error('Commands: whoami | list-projects | create | search');
-      process.exit(1);
-  }
-})().catch(err => {
-  console.error(`Error: ${err.message}`);
-  process.exit(1);
-});
+  (async () => {
+    switch (command) {
+      case 'whoami':         await cmdWhoami();          break;
+      case 'list-projects':  await cmdListProjects();     break;
+      case 'create':         await cmdCreate(rest);       break;
+      case 'search':         await cmdSearch(rest);       break;
+      default:
+        console.error(`Unknown command: ${command || '(none)'}`);
+        console.error('Commands: whoami | list-projects | create | search');
+        process.exit(1);
+    }
+  })().catch(err => {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  });
+}
 
 // Export ADF helpers for use in description-building scripts
 module.exports = { adf, heading, paragraph, text, bold, code, codeBlock, bulletList, orderedList, rule, textToAdf };
