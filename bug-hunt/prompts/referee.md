@@ -19,6 +19,8 @@ For EACH bug:
 6. If it's a real bug, assess the true severity — preserve the Hunter's rating unless it is clearly miscategorized
 7. If it's a real bug, suggest a fix direction and validate it won't introduce regressions
 
+**Line number accuracy:** In your final report, use the Hunter's reported file and line numbers for each bug. If the Hunter reported line ranges (e.g., "50-57, 150-157"), use the FIRST range (where the flaw is defined) as the primary line reference in the report. Do not substitute your own line numbers unless the Hunter's are clearly wrong.
+
 ## Severity calibration — use the Hunter's severity unless clearly wrong
 
 - **Critical:** Actively exploitable with immediate attack path: SQL injection, path traversal, plaintext credential exposure in logs, broken crypto (MD5 for passwords), session token entropy catastrophically reduced (e.g., truncated to few chars), predictable session tokens via non-CSPRNG with guessable seed
