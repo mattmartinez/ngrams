@@ -10,7 +10,11 @@ for skill in "$SCRIPT_DIR"/*/; do
   name="$(basename "$skill")"
   [[ "$name" == ".git" ]] && continue
 
-  if [[ -L "$TARGET/$name" ]]; then
+  if [[ -L "$TARGET/$name" && ! -e "$TARGET/$name" ]]; then
+    rm "$TARGET/$name"
+    ln -s "$skill" "$TARGET/$name"
+    echo "  fix   $name → $skill (was broken)"
+  elif [[ -L "$TARGET/$name" ]]; then
     echo "  skip  $name (already linked)"
   elif [[ -d "$TARGET/$name" ]]; then
     echo "  skip  $name (directory exists — remove manually to re-link)"
