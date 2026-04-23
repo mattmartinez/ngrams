@@ -18,6 +18,7 @@
  *   --labels "a,b,c"              Comma-separated labels
  *   --description "text"          Plain text description (converted to ADF)
  *   --description-file path.json  Pre-built ADF JSON file (preferred)
+ *   --parent KEY                  Parent issue key (e.g. Epic key for a Story)
  *
  * Search options:
  *   --jql "JQL query"             JQL string (required)
@@ -127,23 +128,49 @@ function codeBlock(content, language = null) {
   };
 }
 
+// ADF block-level node types allowed as listItem children.
+const BLOCK_NODE_TYPES = new Set([
+  'paragraph', 'heading', 'codeBlock', 'bulletList', 'orderedList',
+  'blockquote', 'rule', 'panel', 'table', 'mediaGroup', 'mediaSingle',
+]);
+
+function isBlockNode(n) {
+  return n && typeof n === 'object' && BLOCK_NODE_TYPES.has(n.type);
+}
+
+function isAdfNode(n) {
+  return n && typeof n === 'object' && typeof n.type === 'string';
+}
+
+// Coerce any list-item input (string, inline node, block node, or array of
+// inlines/blocks) into a valid listItem.content array of block nodes.
+// ADF requires listItem children to be block-level — bare inline nodes (text,
+// bold, code) will cause Jira to reject the entire document with HTTP 400.
+function normalizeListItem(item) {
+  if (typeof item === 'string') {
+    return [paragraph(text(item))];
+  }
+  if (Array.isArray(item)) {
+    if (item.length === 0) return [paragraph(text(''))];
+    // All blocks → pass through. Any inline → wrap the whole array in paragraph.
+    return item.every(isBlockNode) ? item : [paragraph(...item)];
+  }
+  if (isBlockNode(item)) return [item];
+  if (isAdfNode(item)) return [paragraph(item)];          // inline node
+  return [paragraph(text(String(item)))];                 // fallback
+}
+
 function bulletList(...items) {
   return {
     type: 'bulletList',
-    content: items.map(item => ({
-      type: 'listItem',
-      content: Array.isArray(item) ? item : [paragraph(text(typeof item === 'string' ? item : String(item)))],
-    })),
+    content: items.map(item => ({ type: 'listItem', content: normalizeListItem(item) })),
   };
 }
 
 function orderedList(...items) {
   return {
     type: 'orderedList',
-    content: items.map(item => ({
-      type: 'listItem',
-      content: Array.isArray(item) ? item : [paragraph(text(typeof item === 'string' ? item : String(item)))],
-    })),
+    content: items.map(item => ({ type: 'listItem', content: normalizeListItem(item) })),
   };
 }
 
@@ -203,6 +230,7 @@ async function cmdCreate(args) {
   const labelsRaw   = get('--labels')   || '';
   const descText    = get('--description');
   const descFile    = get('--description-file');
+  const parentKey   = get('--parent');
 
   if (!projectKey) { console.error('--project is required'); process.exit(1); }
   if (!summary)    { console.error('--summary is required');  process.exit(1); }
@@ -228,6 +256,7 @@ async function cmdCreate(args) {
       issuetype:   { name: issueType },
       priority:    { name: priority },
       ...(labels.length ? { labels } : {}),
+      ...(parentKey ? { parent: { key: parentKey } } : {}),
     },
   };
 
