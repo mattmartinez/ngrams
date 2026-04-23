@@ -32,9 +32,29 @@ create workflow uses. **Always build descriptions with these — never raw JSON.
 | `bold(str)` | Bold inline |
 | `code(str)` | Inline code |
 | `codeBlock(content, lang)` | Fenced code block |
-| `bulletList(...items)` | Unordered list; items are strings or inline arrays |
-| `orderedList(...items)` | Ordered list |
+| `bulletList(...items)` | Unordered list — see list-item forms below |
+| `orderedList(...items)` | Ordered list — see list-item forms below |
 | `rule()` | Horizontal rule |
+
+### List items — accepted forms
+
+`bulletList` and `orderedList` each accept one argument per list item. The
+helper normalizes each argument into a valid `listItem` (which ADF requires to
+contain block-level children, never bare inlines). Any of these work:
+
+```javascript
+bulletList(
+  'plain string',                                   // → paragraph(text(...))
+  text('inline node'),                              // → wrapped in paragraph
+  [bold('Label'), text(' description')],            // inline array → one paragraph
+  paragraph(code('already a block'), text(' ok')),  // block node → passed through
+  [paragraph(text('line 1')), paragraph(text('line 2'))], // multi-block item
+)
+```
+
+Do NOT hand-craft `{ type: 'listItem', content: [text(...), bold(...)] }` — ADF
+rejects bare inline children inside a listItem and Jira will 400 the whole doc.
+Pass inlines in an array and let the helper wrap them.
 
 ### Example: bug description
 
