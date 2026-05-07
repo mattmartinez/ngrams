@@ -68,6 +68,7 @@ read the last 3 PR descriptions on node40-api — /slidedeck what we shipped thi
 - **Call out the audience** if it's not obvious — "for engineering leadership" vs "for the team implementing this" changes tone and detail level.
 - **Include quotable principles** if someone said something sharp — e.g. "emphasize: the owner of the data is the producer" becomes a dedicated slide.
 - **Iterate after.** Ask for changes: "swap slides 4 and 5", "add a cost comparison slide after the architecture section", "the flow diagram should show the error path too".
+- **Press `?` while presenting** to open the keyboard help overlay listing every navigation shortcut; press `?` or `Escape` to dismiss it.
 
 ## Output
 

@@ -315,6 +315,103 @@ document.addEventListener('touchend', e => {
 show(0);
 ```
 
+### Keyboard Help Overlay (`?`)
+
+A discoverability aid: pressing `?` toggles a centered card listing every navigation method; `?` again or `Escape` dismisses it. Implement it as a single `keydown` listener that flips the `[hidden]` attribute on a fixed overlay container — no extra state machine, no animation library.
+
+**HTML** — place this inside `<body>`, after the `<nav class="nav">` block (before the `<script>`):
+
+```html
+<div id="helpOverlay" class="help-overlay" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-backdrop" onclick="toggleHelp()"></div>
+  <div class="help-card" role="document">
+    <h3 id="helpTitle">Keyboard & Touch Navigation</h3>
+    <div class="divider"></div>
+    <ul>
+      <li><strong>Arrow keys</strong> <span class="dim">— ← previous slide, → next slide</span></li>
+      <li><strong>Spacebar</strong> <span class="dim">— next slide</span></li>
+      <li><strong>Home / End</strong> <span class="dim">— jump to first or last slide</span></li>
+      <li><strong>Swipe left / right</strong> <span class="dim">— navigate on touch devices</span></li>
+      <li><strong>?</strong> <span class="dim">— toggle this help overlay (Escape also dismisses)</span></li>
+    </ul>
+    <button class="help-close" onclick="toggleHelp()" aria-label="Close help overlay">Close</button>
+  </div>
+</div>
+```
+
+**CSS** — append to the `<style>` block. High `z-index` keeps it above the nav bar; `prefers-reduced-motion` short-circuits the fade for users who request reduced motion:
+
+```css
+.help-overlay {
+  position: fixed; inset: 0;
+  z-index: 1000;                          /* above .nav (z-index: 100) */
+  display: flex; align-items: center; justify-content: center;
+  opacity: 1;
+  transition: opacity .2s ease;
+}
+.help-overlay[hidden] {
+  display: flex;                          /* override default hidden=display:none so we can fade */
+  opacity: 0;
+  pointer-events: none;
+}
+.help-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(6,9,15,.78);
+  backdrop-filter: blur(6px);
+}
+.help-card {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: 12px;
+  padding: 28px 34px;
+  min-width: 360px; max-width: 560px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+.help-card h3 { color: var(--text-primary); font-size: 1.2rem; }
+.help-card ul li { margin-bottom: 10px; }
+.help-card ul li::before { background: var(--cyan); }
+.help-close {
+  margin-top: 18px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: .8rem; font-weight: 500;
+  cursor: pointer;
+}
+.help-close:hover { border-color: var(--cyan); }
+
+@media (prefers-reduced-motion: reduce) {
+  .help-overlay { transition: none; }
+}
+```
+
+**JavaScript** — fold these handlers into the existing `keydown` listener so there is still a single listener. The `toggleHelp()` function is also referenced by the backdrop and close button `onclick`:
+
+```javascript
+const help = document.getElementById('helpOverlay');
+
+function toggleHelp(force) {
+  const willShow = typeof force === 'boolean' ? force : help.hasAttribute('hidden');
+  if (willShow) help.removeAttribute('hidden');
+  else help.setAttribute('hidden', '');
+}
+
+// Replace the existing keydown listener with this combined version:
+document.addEventListener('keydown', e => {
+  if (e.key === '?') { e.preventDefault(); toggleHelp(); return; }
+  if (e.key === 'Escape' && !help.hasAttribute('hidden')) { e.preventDefault(); toggleHelp(false); return; }
+  if (!help.hasAttribute('hidden')) return;        // suppress nav while overlay is open
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+  if (e.key === 'Home') { cur = 0; show(cur); }
+  if (e.key === 'End') { cur = tot - 1; show(cur); }
+});
+```
+
 ---
 
 ## Layout Containers
@@ -556,6 +653,90 @@ For migration plans, implementation phases, numbered sequences:
   <div class="pt">
     <strong>Phase Name</strong> <span class="tag tag-green">zero risk</span>
     <p>Description of what happens in this phase.</p>
+  </div>
+</div>
+```
+
+### Speaker Notes
+
+Per-slide presenter notes that stay hidden by default and toggle on with the `N` key. Useful for talking points, citations, or numbers you don't want on the projected slide. Always hidden in print so handouts stay clean.
+
+**HTML pattern:** Drop a `.speaker-notes` block inside any slide. The `hidden` attribute is a safety net — the CSS hides it regardless, but the attribute keeps notes invisible if the stylesheet fails to load.
+
+```html
+<div class="slide" data-slide="3">
+  <div class="content">
+    <p class="eyebrow" style="color:var(--blue)">Section 2 — Cost</p>
+    <h2>Current Spend Is $42K/mo</h2>
+    <div class="divider"></div>
+    <p>Driven mostly by idle compute in the staging cluster.</p>
+  </div>
+  <div class="speaker-notes" hidden>
+    Pause here. Numbers come from the Sept finance export — link in deck README.
+    Anticipated pushback: "what about reserved instances?" — addressed on slide 7.
+  </div>
+</div>
+```
+
+**CSS:** Default state hides notes entirely. When `body.notes-visible` is set, notes render in a fixed bottom panel above the nav, monospace and dimmed so they read as presenter chrome rather than slide content. `@media print` always hides the panel.
+
+```css
+.speaker-notes { display: none; }
+
+body.notes-visible .slide.active .speaker-notes {
+  display: block;
+  position: fixed;
+  left: 0; right: 0;
+  bottom: 56px;                    /* sits just above the nav bar */
+  max-height: 28vh;
+  overflow-y: auto;
+  padding: 12px 36px;
+  background: rgba(6,9,15,.94);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .82rem;
+  line-height: 1.55;
+  color: var(--text-dim);          /* dimmed so it reads as presenter chrome */
+  z-index: 90;                     /* below nav (z-index: 100) */
+}
+
+@media print {
+  .speaker-notes,
+  body.notes-visible .slide.active .speaker-notes { display: none !important; }
+}
+```
+
+**JS:** Add an `N` keypress handler alongside the existing navigation listener. It toggles the `notes-visible` class on `<body>`, which flips visibility for the active slide's notes panel.
+
+```javascript
+document.addEventListener('keydown', e => {
+  if (e.key === 'n' || e.key === 'N') {
+    e.preventDefault();
+    document.body.classList.toggle('notes-visible');
+  }
+});
+```
+
+**Usage example slide** — a content slide with notes attached. Press `N` during the talk to reveal the panel; press `N` again to hide it.
+
+```html
+<div class="slide" data-slide="5">
+  <div class="content">
+    <p class="eyebrow" style="color:var(--green)">Section 3 — Proposal</p>
+    <h2>Move Ingest to S3 + RabbitMQ</h2>
+    <div class="divider"></div>
+    <ul>
+      <li>Drop the polling worker entirely</li>
+      <li>RabbitMQ push replaces 90s of latency</li>
+      <li>Clean ownership boundary at the bucket</li>
+    </ul>
+  </div>
+  <div class="speaker-notes" hidden>
+    Talking points:
+    - Latency number (90s) is p95 from last week's traces, not p50.
+    - If asked about cost: S3 + MQ is ~$200/mo cheaper than current worker fleet.
+    - Skip the migration detail — it's covered three slides from now.
   </div>
 </div>
 ```
