@@ -142,6 +142,12 @@ function isAdfNode(n) {
   return n && typeof n === 'object' && typeof n.type === 'string';
 }
 
+// Strings or non-block ADF nodes are inline-like and must be wrapped in a paragraph.
+function isInlineLike(n) {
+  if (typeof n === 'string') return true;
+  return isAdfNode(n) && !isBlockNode(n);
+}
+
 // Coerce any list-item input (string, inline node, block node, or array of
 // inlines/blocks) into a valid listItem.content array of block nodes.
 // ADF requires listItem children to be block-level — bare inline nodes (text,
@@ -152,8 +158,20 @@ function normalizeListItem(item) {
   }
   if (Array.isArray(item)) {
     if (item.length === 0) return [paragraph(text(''))];
-    // All blocks → pass through. Any inline → wrap the whole array in paragraph.
-    return item.every(isBlockNode) ? item : [paragraph(...item)];
+    if (item.every(isBlockNode)) return item;
+    if (item.every(isInlineLike)) return [paragraph(...item)];
+    // Mixed: partition contiguous inline runs into paragraphs, pass blocks as siblings.
+    const out = [];
+    let run = [];
+    const flushRun = () => {
+      if (run.length) { out.push(paragraph(...run)); run = []; }
+    };
+    for (const n of item) {
+      if (isBlockNode(n)) { flushRun(); out.push(n); }
+      else { run.push(n); }
+    }
+    flushRun();
+    return out;
   }
   if (isBlockNode(item)) return [item];
   if (isAdfNode(item)) return [paragraph(item)];          // inline node
@@ -265,6 +283,25 @@ async function cmdCreate(args) {
   console.log(`   ${BASE_URL}/browse/${result.key}`);
 }
 
+// Narrow JQL pre-validator — catches obvious foot-guns before hitting the API.
+// Returns an error string on failure, or null when the query is plausibly valid.
+// Not a full parser: only checks unmatched double quotes and bare leading/trailing AND/OR.
+function validateJql(jql) {
+  const trimmed = jql.trim();
+  if (!trimmed) return 'empty query';
+
+  let quotes = 0;
+  for (let i = 0; i < jql.length; i++) {
+    if (jql[i] === '"' && jql[i - 1] !== '\\') quotes++;
+  }
+  if (quotes % 2 !== 0) return 'unmatched double quote';
+
+  if (/^(AND|OR)\b/i.test(trimmed)) return 'leading AND/OR with no left operand';
+  if (/\b(AND|OR)$/i.test(trimmed)) return 'trailing AND/OR with no right operand';
+
+  return null;
+}
+
 async function cmdSearch(args) {
   requireCreds();
 
@@ -277,6 +314,12 @@ async function cmdSearch(args) {
   const max  = parseInt(get('--max') || '20', 10);
 
   if (!jql) { console.error('--jql is required'); process.exit(1); }
+
+  const jqlError = validateJql(jql);
+  if (jqlError) {
+    console.error(`Malformed JQL: ${jqlError}`);
+    process.exit(1);
+  }
 
   const data = await request(
     'POST',
