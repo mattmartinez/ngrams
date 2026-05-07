@@ -46,14 +46,78 @@ require_creds() {
 }
 
 # ── HTTP helpers ───────────────────────────────────────────────────────────────
+# Retry policy: HTTP 408/429/502/503 and curl exit 28 (timeout) trigger up to
+# 3 retries with exponential backoff (1s, 2s, 4s). Each attempt is capped at
+# 15s via --max-time. Auth (401/403) and other 4xx are NOT retried.
+
+_jretryable() {
+  local http="$1" curl_exit="$2"
+  case "$http" in 408|429|502|503) return 0 ;; esac
+  [[ "$curl_exit" == "28" ]] && return 0
+  return 1
+}
+
+_jfail_msg() {
+  local http="$1" curl_exit="$2"
+  if [[ "$curl_exit" != "0" ]] || [[ "$http" =~ ^5 ]]; then
+    echo "Connection timeout — Jenkins may be slow or offline" >&2
+  fi
+}
 
 jget() {
-  curl -sf -u "$JENKINS_USER:$JENKINS_API_TOKEN" "$1"
+  local url="$1"
+  local retry=0 max_retries=3 sleep_s=1
+  local body_file http curl_exit cause
+  body_file=$(mktemp)
+  while :; do
+    http=$(curl -s --max-time 15 -o "$body_file" -w '%{http_code}' \
+      -u "$JENKINS_USER:$JENKINS_API_TOKEN" "$url")
+    curl_exit=$?
+    if [[ $curl_exit -eq 0 && "$http" =~ ^2 ]]; then
+      cat "$body_file"
+      rm -f "$body_file"
+      return 0
+    fi
+    if (( retry < max_retries )) && _jretryable "$http" "$curl_exit"; then
+      retry=$((retry + 1))
+      cause="http $http"
+      [[ "$curl_exit" == "28" ]] && cause="curl timeout"
+      echo "WARNING: jenkins jget retry $retry/$max_retries after $cause" >&2
+      sleep "$sleep_s"
+      sleep_s=$((sleep_s * 2))
+      continue
+    fi
+    _jfail_msg "$http" "$curl_exit"
+    rm -f "$body_file"
+    return 1
+  done
 }
 
 jpost() {
-  curl -s -o /dev/null -w "%{http_code}" -X POST \
-    -u "$JENKINS_USER:$JENKINS_API_TOKEN" "$1"
+  local url="$1"
+  local retry=0 max_retries=3 sleep_s=1
+  local http curl_exit cause
+  while :; do
+    http=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' -X POST \
+      -u "$JENKINS_USER:$JENKINS_API_TOKEN" "$url")
+    curl_exit=$?
+    if [[ $curl_exit -eq 0 ]] && ! _jretryable "$http" "$curl_exit"; then
+      printf '%s' "$http"
+      return 0
+    fi
+    if (( retry < max_retries )) && _jretryable "$http" "$curl_exit"; then
+      retry=$((retry + 1))
+      cause="http $http"
+      [[ "$curl_exit" == "28" ]] && cause="curl timeout"
+      echo "WARNING: jenkins jpost retry $retry/$max_retries after $cause" >&2
+      sleep "$sleep_s"
+      sleep_s=$((sleep_s * 2))
+      continue
+    fi
+    _jfail_msg "$http" "$curl_exit"
+    printf '%s' "${http:-000}"
+    return 1
+  done
 }
 
 # ── Commands ───────────────────────────────────────────────────────────────────
