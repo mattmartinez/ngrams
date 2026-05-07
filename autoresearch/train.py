@@ -11,6 +11,7 @@ os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 import gc
 import json
 import math
+import sys
 import time
 from dataclasses import dataclass, asdict
 
@@ -652,6 +653,15 @@ except OSError as e:
 model.eval()
 with autocast_ctx:
     val_bpb = evaluate_bpb(model, tokenizer, DEVICE_BATCH_SIZE)
+
+# Refuse to write results if eval produced a non-finite or negative bpb —
+# silent garbage in results.json poisons downstream comparison runs.
+if not math.isfinite(val_bpb) or val_bpb < 0:
+    print(
+        f"EVAL FAILED: val_bpb is NaN/inf/negative (val_bpb={val_bpb}) — refusing to write results",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 # Final summary
 t_end = time.time()
