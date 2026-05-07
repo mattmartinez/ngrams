@@ -9,6 +9,7 @@
  *   list-projects                 List all accessible projects
  *   create [options]              Create an issue
  *   search [options]              Search with JQL
+ *   bulk-update [options]         Apply field changes to every issue matching a JQL
  *
  * Create options:
  *   --project KEY                 Jira project key (required)
@@ -24,11 +25,20 @@
  *   --jql "JQL query"             JQL string (required)
  *   --max N                       Max results (default: 20)
  *
+ * Bulk-update options (run with --help for full details):
+ *   --jql "JQL query"             Selects which issues to update (required)
+ *   --assignee ACCOUNT_ID         Reassign matched issues
+ *   --status NAME                 Transition matched issues
+ *   --labels "a,b,c"              Replace labels (empty string clears)
+ *   --priority NAME               Set priority
+ *   --apply                       Actually perform the updates (default: dry run)
+ *
  * Usage:
  *   source ~/.gsd/jira.env
  *   node jira-api.js whoami
  *   node jira-api.js create --project CD --summary "Fix thing" --type Bug
  *   node jira-api.js search --jql 'project = CD AND statusCategory != Done'
+ *   node jira-api.js bulk-update --jql 'project = CD AND labels = stale' --labels ''
  */
 
 'use strict';
@@ -356,6 +366,148 @@ async function cmdSearch(args) {
   console.log(`\n${BASE_URL}/issues/?jql=${encoded}`);
 }
 
+function printBulkUpdateHelp() {
+  console.log(`Usage: jira-api.js bulk-update --jql 'JQL' [options]
+
+Apply the same field changes to every issue matching the JQL.
+Without --apply, runs as a dry run: prints matched issues + planned changes
+and exits without writing anything.
+
+Options:
+  --jql 'JQL'         JQL selecting issues to update (required)
+  --assignee ID       Set assignee accountId on every matched issue
+  --status NAME       Transition every matched issue to this status (case-insensitive)
+  --labels "a,b,c"    REPLACE labels on every matched issue (empty string clears)
+  --priority NAME     Set priority (Highest | High | Medium | Low | Lowest)
+  --max N             Max matches to fetch (default 20)
+  --apply             Actually perform the updates (omit for dry run)
+  --help              Show this help
+
+At least one of --assignee, --status, --labels, --priority must be provided.
+
+Notes:
+  --assignee takes an accountId, not an email or display name.
+  --labels REPLACES the label set; pass --labels "" to clear all labels.
+  --status looks up matching transitions per-issue and may legitimately fail
+  on individual issues whose current state does not allow that transition.
+  Failures are reported per-issue; the command exits non-zero if any failed.
+
+Examples:
+  bulk-update --jql 'project = CD AND labels = stale' --labels ''
+  bulk-update --jql 'project = CD AND priority = Lowest' --priority Low --apply
+`);
+}
+
+async function cmdBulkUpdate(args) {
+  if (args.includes('--help') || args.includes('-h')) {
+    printBulkUpdateHelp();
+    return;
+  }
+
+  requireCreds();
+
+  const get = (flag) => {
+    const i = args.indexOf(flag);
+    return i !== -1 ? args[i + 1] : null;
+  };
+  const has = (flag) => args.includes(flag);
+
+  const jql       = get('--jql');
+  const assignee  = get('--assignee');
+  const status    = get('--status');
+  const labelsRaw = get('--labels');
+  const priority  = get('--priority');
+  const max       = parseInt(get('--max') || '20', 10);
+  const apply     = has('--apply');
+
+  if (!jql) { console.error('--jql is required'); process.exit(1); }
+
+  const jqlError = validateJql(jql);
+  if (jqlError) {
+    console.error(`Malformed JQL: ${jqlError}`);
+    process.exit(1);
+  }
+
+  // Distinguish "flag absent" (null) from "flag present with empty value" so an
+  // empty --labels means "clear all labels" rather than "no change".
+  const labels = labelsRaw === null
+    ? null
+    : (labelsRaw ? labelsRaw.split(',').map(l => l.trim()).filter(Boolean) : []);
+
+  if (assignee == null && status == null && labels == null && priority == null) {
+    console.error('At least one of --assignee, --status, --labels, --priority is required');
+    process.exit(1);
+  }
+
+  const data = await request(
+    'POST',
+    '/search/jql',
+    { jql, maxResults: max, fields: ['summary', 'status', 'priority', 'assignee', 'labels'] }
+  );
+  const issues = data.issues || [];
+
+  if (!issues.length) {
+    console.log('No issues match the JQL — nothing to update.');
+    console.log(`JQL: ${jql}`);
+    return;
+  }
+
+  console.log(`Matched ${issues.length} issue(s):`);
+  for (const issue of issues) {
+    const key = issue.key.padEnd(10);
+    const summary = (issue.fields.summary || '').slice(0, 60);
+    console.log(`  ${key} ${summary}`);
+  }
+  console.log('');
+  console.log('Planned changes:');
+  if (assignee != null) console.log(`  assignee → ${assignee}`);
+  if (status   != null) console.log(`  status   → ${status}`);
+  if (labels   != null) console.log(`  labels   → ${labels.length ? labels.join(', ') : '(cleared)'}`);
+  if (priority != null) console.log(`  priority → ${priority}`);
+  console.log('');
+
+  if (!apply) {
+    console.log('Dry run — pass --apply to perform these updates.');
+    return;
+  }
+
+  let ok = 0, failed = 0;
+  for (const issue of issues) {
+    try {
+      const fields = {};
+      if (labels   !== null) fields.labels   = labels;
+      if (priority !== null) fields.priority = { name: priority };
+
+      if (assignee !== null) {
+        await request('PUT', `/issue/${issue.key}/assignee`, { accountId: assignee });
+      }
+      if (Object.keys(fields).length) {
+        await request('PUT', `/issue/${issue.key}`, { fields });
+      }
+      if (status !== null) {
+        const transitions = await request('GET', `/issue/${issue.key}/transitions`);
+        const want = status.toLowerCase();
+        const t = (transitions.transitions || []).find(t =>
+          t.name.toLowerCase() === want ||
+          (t.to && t.to.name && t.to.name.toLowerCase() === want)
+        );
+        if (!t) {
+          throw new Error(`no transition to "${status}" available from current state`);
+        }
+        await request('POST', `/issue/${issue.key}/transitions`, { transition: { id: t.id } });
+      }
+      console.log(`✅ ${issue.key} updated`);
+      ok++;
+    } catch (err) {
+      console.error(`❌ ${issue.key} failed: ${err.message}`);
+      failed++;
+    }
+  }
+  console.log('');
+  console.log(`Done. ${ok} updated, ${failed} failed.`);
+  if (failed) process.exit(1);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 if (require.main === module) {
@@ -363,13 +515,14 @@ if (require.main === module) {
 
   (async () => {
     switch (command) {
-      case 'whoami':         await cmdWhoami();          break;
+      case 'whoami':         await cmdWhoami();           break;
       case 'list-projects':  await cmdListProjects();     break;
       case 'create':         await cmdCreate(rest);       break;
       case 'search':         await cmdSearch(rest);       break;
+      case 'bulk-update':    await cmdBulkUpdate(rest);   break;
       default:
         console.error(`Unknown command: ${command || '(none)'}`);
-        console.error('Commands: whoami | list-projects | create | search');
+        console.error('Commands: whoami | list-projects | create | search | bulk-update');
         process.exit(1);
     }
   })().catch(err => {

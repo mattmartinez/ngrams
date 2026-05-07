@@ -49,6 +49,7 @@ Always build descriptions with those helpers, never with raw JSON.
 |-----------|----------|
 | "make this a ticket", "file a bug", "create a story", "add to backlog" | `workflows/create.md` |
 | "search Jira", "find tickets for", "what tickets exist for" | `workflows/search.md` |
+| "bulk update", "reassign all of these", "relabel matching tickets", "transition every X to Y" | `workflows/bulk-update.md` |
 | "set up Jira", credentials missing, `~/.gsd/jira.env` not found | `workflows/setup.md` |
 
 When intent is clear, go straight to the workflow without asking.
