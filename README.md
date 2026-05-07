@@ -15,6 +15,7 @@ Cognitive patterns for AI coding agents. Portable skill modules that slot into a
 | **bug-hunt** | Adversarial 3-agent bug sweep (Hunter → Skeptic → Referee) |
 | **bug-hunt-research** | Autonomous prompt optimization loop for bug-hunt. Runs bug-hunt against benchmark codebases with planted bugs & traps, scores results, keeps or reverts prompt changes. Modeled on autoresearch. |
 | **cmux** | Claude Code integration with cmux terminal multiplexer — splits, workspaces, sidebar, notifications |
+| **jenkins** | Interact with Jenkins CI/CD — list jobs, check build status, trigger builds, read console output, diagnose failures. Credentials stored in `~/.gsd/jenkins.env`. |
 | **jira** | Create and search Jira tickets from any terminal session. Credentials stored in `~/.gsd/jira.env`, project aliases in `~/.gsd/jira-projects.json`. Say "make this a Jira ticket" and it handles the rest. |
 | **mdthis** | Generate markdown artifacts from conversation context |
 | **slidedeck** | Build polished, self-contained HTML slide deck presentations from source material |
@@ -38,8 +39,9 @@ Some skills need credentials stored outside any repo:
 |-------|------|-------------------|
 | **jira** | `~/.gsd/jira.env` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
 | | `~/.gsd/jira-projects.json` | alias → project key map |
+| **jenkins** | `~/.gsd/jenkins.env` | `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN` |
 
-Run `/jira setup` in any session to be walked through the Jira credential setup interactively.
+Run `/jira setup` or `/jenkins setup` in any session to be walked through credential setup interactively.
 
 ## Structure
 
