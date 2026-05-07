@@ -293,6 +293,15 @@ def main():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     confirmed = parse_referee_output(text)
+
+    expected_total = len(manifest["bugs"])
+    if expected_total > 0 and len(confirmed) < expected_total / 3:
+        print(
+            f"WARNING: Parser matched only {len(confirmed)} of {expected_total} "
+            f"expected bugs; output may be malformed. Check referee output format.",
+            file=sys.stderr,
+        )
+
     scores = compute_scores(manifest, confirmed)
     matched_indices = set(scores["details"]["matched_planted_indices"])
     scores["difficulty_breakdown"] = difficulty_breakdown(manifest, matched_indices)
