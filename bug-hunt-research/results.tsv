@@ -7,3 +7,6 @@ c57645a	0.750000	0.9375	0.9375	0.9375	1.0000	experiment 2: severity calibration 
 324549a	1.000000	1.0000	1.0000	1.0000	1.0000	experiment 5: Unicode confusable + unused import checks
 f46d64c	1.000000	1.0000	1.0000	1.0000	1.0000
 324549a	1.000000	1.0000	1.0000	1.0000	1.0000	validation run 2: perfect again
+764142b	0.628571	0.6857	0.7500	0.6316	1.0000	opus-4.7 triage: pre-triage dirty tree (all 3 uncommitted edits — SKILL Step 1.2 + hunter compression + referee FIRST-range); recall hurt by referee rule picking import lines
+764142b	0.666667	0.6667	0.9375	0.5172	1.0000	opus-4.7 triage: clean HEAD baseline; opus finds more real bugs than manifest accounts for (14 FPs = real extras), benchmark is saturated
+4bfe7c0	0.536585	0.7317	0.9375	0.6000	1.0000	post-merge validation on opus-4.7: recall 15/16 (missed PLANTED-06 due to referee citing dispatch line 74 vs handler 161-165); 10 FPs are all real extras (SHA-256 pw hash, MAX_SESSIONS, missing-vs-zero, concurrency)

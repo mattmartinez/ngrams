@@ -71,32 +71,6 @@ If found, read the profile file. The profile contains:
 - Append the profile's domain-specific checks to the Hunter's task (AFTER the generic checklist)
 - If no profile is found, proceed with the generic prompts only
 
-### Step 1.2: Ensure production branch
-
-Before scanning any code, ensure all git repositories under the target are on their production branch (main or master). This applies whether the target is a single repo or a directory containing multiple repos.
-
-```bash
-# Find all git repos at or under the target
-find [target] -name .git -type d -maxdepth 3 | while read gitdir; do
-  repo=$(dirname "$gitdir")
-  cd "$repo"
-  current=$(git branch --show-current 2>/dev/null)
-  if git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
-    prod_branch="main"
-  elif git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
-    prod_branch="master"
-  else
-    prod_branch="$current"
-  fi
-  if [ "$current" != "$prod_branch" ]; then
-    echo "Switching $(basename $repo): $current → $prod_branch"
-    git checkout "$prod_branch" --quiet
-  fi
-done
-```
-
-Bug-hunt scans what is deployed in production. Always switch to main/master before reading code, unless the user explicitly passes `--diff` or `--commit` to target a specific branch.
-
 ### Step 1.5: Scope assessment and stack detection
 
 **Resolve the target file list:**
