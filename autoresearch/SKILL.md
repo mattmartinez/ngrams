@@ -105,6 +105,16 @@ See [references/experiment-loop.md](references/experiment-loop.md) for the compl
 - **Timeout**: Each experiment should take ~5 minutes of training + startup overhead. If a run exceeds 10 minutes total, kill it and treat as failure.
 - **Never commit results.tsv**: It stays untracked.
 
+### Crash Recovery Protocol
+
+When a run dies before producing `results.json`, classify the failure first — don't shotgun-fix. Use the elapsed wall time and the traceback (or its absence) to pick exactly one branch:
+
+- **Crash within first 30 seconds → likely OOM.** CUDA OOM most often surfaces during compile or the first few steps once memory peaks. Reduce `DEVICE_BATCH_SIZE` by 25% (e.g. 128 → 96, 96 → 72) and re-run **without** changing anything else. If the run completes, log the new device batch size as the working ceiling and continue. Do not raise `TOTAL_BATCH_SIZE` to compensate — keep gradient accumulation steps to absorb the change.
+- **Crash later or with a Python traceback → targeted fix, one shot only.** Run `tail -n 50 run.log`, read the traceback, and attempt **at most one** targeted fix (an import, a typo, a shape mismatch, an off-by-one in an index). Re-run once. If it still crashes, treat the experiment as failed: revert with `git reset --hard HEAD~1`, log it in `results.tsv` as `crash`, and move on.
+- **Two consecutive experiments crash with different errors → stop guessing.** Different crash signatures mean your mental model is wrong. Do not attempt a third fix. `git reset --hard` to the last-known-good commit (the most recent `keep` row in `results.tsv`), update `insights.md` with what failed and why, and pick a new direction in a different category.
+
+The whole point of this protocol is to fail fast and cheap. A 30-second OOM costs nothing; an hour spent debugging a tangled chain of failed experiments is the real loss.
+
 ---
 
 ## Phase 3: Decision Making
