@@ -112,3 +112,45 @@ If the conversation discussed an auth refactor *and* a database migration, then 
 2. Open with an intro line such as: "Scoped to the most recent thread: database migration. The earlier auth-refactor discussion is not included — re-run with `findings on auth refactor` to capture that."
 
 This makes the scope choice auditable and cheap to correct.
+
+## Prerequisites & Errors
+
+This section pins down where files land and what to do when filesystem state is unexpected. Apply these rules every time, without prompting the user.
+
+### Output location: always `<launch-root>/local/`
+
+- **Launch-root** is the working directory where the agent (Claude Code, the harness, etc.) was *originally launched*. It is **not** the agent's current working directory at the moment the skill runs — those can diverge if the agent ran `cd` into a subdirectory or was invoked from a nested shell.
+- All output goes to `<launch-root>/local/`. Never write to `./local/` blindly, never write to the current working directory's `local/`, and never write outside `local/`.
+- If you cannot determine the launch-root with certainty, fall back to the closest ancestor directory of the current cwd that looks like a project root (contains `.git/`, `package.json`, `pyproject.toml`, etc.) and write to `<that>/local/`. State the resolved path in your reply to the user so they can correct it if wrong.
+
+### Create `local/` if missing
+
+- If `<launch-root>/local/` does not exist, create it (recursively, mode 0755) before writing the file. Do not prompt the user — directory creation is part of the skill's contract.
+- Do not create any other directories. The skill writes flat into `local/`; it does not nest by date, topic, or directive.
+
+### Filename collisions: append a numeric suffix
+
+- Before writing, check whether the target path already exists.
+- If it does, append `-2` to the descriptor (before `.md`) and re-check. If `-2` also exists, try `-3`, then `-4`, and so on until you find a free name.
+- Never overwrite an existing file. The timestamp portion of the filename usually prevents collisions, but two invocations within the same second (or a re-run with the same directive at the same minute granularity, depending on how the timestamp is rendered) will collide — the suffix rule handles that.
+
+Example collision walk:
+
+```
+2026-05-07-103015-pr-auth-refactor.md       ← exists
+2026-05-07-103015-pr-auth-refactor-2.md     ← exists
+2026-05-07-103015-pr-auth-refactor-3.md     ← write here
+```
+
+### Worked example: path resolution from a subdirectory
+
+Agent was launched in `/Users/kim/project`, then `cd`'d into `/Users/kim/project/sub` before the user invoked `/mdthis findings`. The skill must:
+
+1. Identify launch-root as `/Users/kim/project` (not `/Users/kim/project/sub`).
+2. Resolve the output directory to `/Users/kim/project/local/`.
+3. Create `/Users/kim/project/local/` if it does not already exist.
+4. Compute the filename, e.g. `2026-05-07-103015-findings.md`.
+5. Check `/Users/kim/project/local/2026-05-07-103015-findings.md` for existence; suffix with `-2`, `-3`, ... if needed.
+6. Write to the resolved absolute path — **not** to `/Users/kim/project/sub/local/...`.
+
+The output reported to the user should always reference the absolute path, so the user can verify the file landed where they expect even when their shell is in a different directory.
