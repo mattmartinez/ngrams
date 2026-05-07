@@ -77,6 +77,9 @@ If found, read the profile file. The profile contains:
 
 If the target uses `--diff`, `--commit`, or `--pr`, run the appropriate git/gh command to get the list of changed files. Pass this explicit file list to the Hunter instead of a directory.
 
+**If the resolved file list is empty:** Report 0 findings immediately and skip directly to Step 5 (Present the Final Report). No agents need to run — there is nothing to analyze.
+_Rationale:_ A `--diff` with no changes, an empty directory, or a filter that excludes everything is not a bug-free codebase, just a no-op scan. Spending agent budget on zero files is waste, and running Hunter against nothing produces noise rather than signal.
+
 **Count source files in the target:**
 
 ```bash
@@ -90,6 +93,8 @@ find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" \
 
 - **If > 50 source files:** Run multiple Hunter agents in parallel using `subagent` parallel mode, each assigned a different directory/module. Merge their findings before passing to the Skeptic.
 - **If > 150 source files:** Additionally prioritize — run a quick recon agent first to identify the highest-risk modules (auth, data access, API handlers, config), then assign Hunters only to those modules.
+- **If > 200 source files:** Invoke a recon agent first to identify the highest-risk modules (auth, data access, API handlers, config, payment/permissions, parsing), then dispatch parallel Hunters scoped to those modules only. Do not attempt to scan the whole tree.
+  _Rationale:_ Token and time budget for a single Hunter run scales with file count. Beyond ~200 files the recon-then-targeted-hunters pattern produces higher-fidelity findings than a single broad scan, and avoids context exhaustion on the Hunter.
 
 **Detect the project stack:**
 

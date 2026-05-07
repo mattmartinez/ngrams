@@ -235,6 +235,21 @@ For each finding, use this exact format:
 - **Test coverage:** [Tested / Untested / Partially tested — does any test exercise this code path?]
 ---
 
+### Reconnaissance metadata (emit before findings)
+
+Before the `===HUNTER_FINDINGS_START===` delimiter, emit a `FINDINGS_METADATA` fenced block so downstream agents (Skeptic, Referee) know what was actually scanned. This lets the Skeptic calibrate scope confidence — any finding outside the listed files or flows is automatically suspect.
+
+```findings-metadata
+stack:               <detected language(s) and framework(s), e.g. "Python / FastAPI">
+target:              <original scan target: path, --diff, --commit, or --pr>
+files_scanned_count: <integer>
+files_scanned_sample: <up to ~10 representative paths, comma-separated>
+cross_file_flows_analyzed: <short list of data flows traced, e.g. "user input → DB, auth check → handler", or "none">
+scope_notes:         <caveats: files skipped, parallel-hunter assignment, time/budget limits, profile applied>
+```
+
+Empty or inapplicable fields must still be present — use `none` or `0` so the block stays machine-parseable.
+
 Wrap your entire findings section in these exact delimiters:
 
 ===HUNTER_FINDINGS_START===
