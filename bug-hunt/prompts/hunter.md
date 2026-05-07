@@ -260,3 +260,5 @@ After the closing delimiter, output:
 
 **TOTAL FINDINGS:** [count]
 **TOTAL SCORE:** [sum of points]
+
+If you are one of multiple parallel hunters, you will be assigned a BUG-ID prefix (e.g. BUG-1xx). Prepend it to all findings.
