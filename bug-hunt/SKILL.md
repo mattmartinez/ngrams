@@ -112,6 +112,16 @@ Use the `subagent` tool in single mode (or parallel mode for large codebases):
 - agent: `worker` (or any general-purpose agent available)
 - task: Include the hunter prompt text AND the scan target path AND the detected stack-specific checklist. The Hunter must use tools (Read, Bash with find/grep) to examine actual code.
 
+**Parallel-hunter BUG-ID namespacing:** When running multiple Hunters in parallel (per the Step 1.5 thresholds), assign each Hunter a distinct BUG-ID prefix so findings remain unique across the merge. The assignment scheme is:
+
+- Hunter-A → reports `BUG-101`, `BUG-102`, `BUG-103`, … (BUG-1xx)
+- Hunter-B → reports `BUG-201`, `BUG-202`, `BUG-203`, … (BUG-2xx)
+- Hunter-C → reports `BUG-301`, `BUG-302`, `BUG-303`, … (BUG-3xx)
+
+Append the assigned prefix to each Hunter's task instructions (e.g. "You are Hunter-A. Prefix all your findings with BUG-1xx."). When merging the parallel findings, preserve each Hunter's namespace verbatim — do NOT renumber findings into a single contiguous sequence. The Skeptic receives the merged findings with all namespaces preserved so it can attribute claims back to the originating Hunter and so cross-Hunter duplicate claims become visible by their distinct BUG-IDs.
+
+In single-Hunter mode, no prefix is assigned and the Hunter uses its default `BUG-1`, `BUG-2`, … numbering.
+
 Wait for the Hunter to complete and capture its full output.
 
 Extract the content between `===HUNTER_FINDINGS_START===` and `===HUNTER_FINDINGS_END===` delimiters. This is the structured findings payload.
