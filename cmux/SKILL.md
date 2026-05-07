@@ -135,6 +135,32 @@ Note: cmux browser is WebKit-based (not Chromium) — behavior may differ from P
 
 ## Execution Rules
 
+### Send vs send-surface — pick the right primitive
+
+For a single command line, prefer `send-surface` with `&&` chaining (it submits as one unit). For interactive multi-step input, use `send` + `send-key enter` separately so each step can be observed.
+
+| Style | When to use |
+|-------|-------------|
+| `send-surface` (one-shot) | A single command line, or several joined with `&&`. The whole thing is delivered and submitted atomically. |
+| `send` + `send-key enter` | Multi-step interactive input where you need to observe state between steps or react to a prompt. |
+
+Side-by-side: run `cd $ROOT && npm test` in the same surface.
+
+```bash
+# Style A: send-surface (one-shot)
+cmux send-surface --surface "$S" "cd $ROOT && npm test"
+
+# Style B: send + send-key enter (step-by-step)
+cmux send --surface "$S" "cd $ROOT"
+cmux send-key --surface "$S" enter
+cmux send --surface "$S" "npm test"
+cmux send-key --surface "$S" enter
+```
+
+Tradeoff: Style A is fewer round-trips but succeeds-or-fails as one unit. Style B lets you inspect terminal state between steps but adds latency and lets partial state linger if interrupted.
+
+### Rules
+
 1. **Always verify cmux is available** before running commands. Check env vars and socket existence.
 2. **Scope to the current workspace.** Use `--workspace $CMUX_WORKSPACE_ID` on all workspace-scoped operations.
 3. **Capture and report surface IDs.** When creating splits or workspaces, tell the user the new surface/workspace ID so they can reference it later.
@@ -162,6 +188,78 @@ Note: cmux browser is WebKit-based (not Chromium) — behavior may differ from P
    # ... run step ...
    cmux set-progress 0.5 --label "Step 2/4: Building" --workspace $CMUX_WORKSPACE_ID
    ```
+
+## Troubleshooting Common Errors
+
+When a cmux command fails, run the diagnostic for the matching symptom before reporting failure to the user. Each scenario lists what you'll see, how to recover, and what to tell the user if recovery fails.
+
+### 1. Socket timeout / connection refused
+
+Symptom: command exits non-zero with `ECONNREFUSED` against the cmux socket, or hangs.
+
+```text
+$ cmux surface list --workspace $CMUX_WORKSPACE_ID
+Error: connect ECONNREFUSED /tmp/cmux.sock
+```
+
+Recovery — confirm the socket exists, then retry with a short backoff:
+
+```bash
+SOCK="${CMUX_SOCKET_PATH:-/tmp/cmux.sock}"
+test -S "$SOCK" || { echo "socket missing — cmux app is not running"; exit 1; }
+for i in 1 2 3; do
+  cmux surface list --workspace "$CMUX_WORKSPACE_ID" && break
+  sleep 1
+done
+```
+
+If all three retries fail, tell the user: "cmux socket at `$SOCK` is not responding — restart the cmux app (or check Console.app for crash logs) and rerun."
+
+### 2. Outdated cmux CLI
+
+Symptom: command fails with `unknown subcommand` or `unknown flag` even though the syntax matches this skill.
+
+```text
+$ cmux send-surface --surface "$S" "ls"
+error: unknown command "send-surface"
+```
+
+Recovery — check the installed CLI version and surface a clear upgrade message:
+
+```bash
+INSTALLED=$(cmux --version 2>/dev/null || echo "unknown")
+echo "cmux CLI version: $INSTALLED"
+```
+
+If the version reports `unknown` or is older than the examples here assume, tell the user verbatim: "Your cmux CLI ($INSTALLED) is missing a command this skill requires — update cmux from https://cmux.com and rerun the request." Do not silently fall back to a different command — the user needs to know their CLI is stale.
+
+### 3. CMUX_WORKSPACE_ID not set
+
+Symptom: workspace-scoped commands fail with `--workspace is required`, or operate on the wrong workspace.
+
+```text
+$ cmux set-status task "Building"
+Error: --workspace is required when CMUX_WORKSPACE_ID is unset
+```
+
+Recovery — detect the unset env var and fall back to the active workspace from `cmux workspace list`:
+
+```bash
+if [ -z "$CMUX_WORKSPACE_ID" ]; then
+  ACTIVE=$(cmux workspace list --json 2>/dev/null \
+           | jq -r '.[] | select(.active==true) | .id' \
+           | head -1)
+  if [ -n "$ACTIVE" ]; then
+    echo "CMUX_WORKSPACE_ID was unset — using active workspace $ACTIVE"
+    export CMUX_WORKSPACE_ID="$ACTIVE"
+  else
+    echo "Cannot determine workspace — pass --workspace <id> explicitly" >&2
+    exit 1
+  fi
+fi
+```
+
+If no active workspace can be detected, tell the user the command needs `--workspace <id>` passed explicitly.
 
 ## Multi-Agent Split Orchestration
 
