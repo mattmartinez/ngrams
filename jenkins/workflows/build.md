@@ -30,5 +30,5 @@ bash <skill_dir>/scripts/jenkins-api.sh status <folder> <project> [branch]
 
 - Jenkins returns HTTP 201 when a build is queued successfully.
 - The build may sit in the queue briefly before starting.
-- If the job requires parameters, use the Jenkins UI — parameterized builds
-  via API need endpoint `/buildWithParameters` with form data, which varies per job.
+- If the job requires parameters, use `workflows/build-params.md` — it covers
+  parameter discovery and the `build-with-params` script subcommand.

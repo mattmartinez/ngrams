@@ -12,6 +12,8 @@
 #   log <folder> <project> [branch] [build] Console output (default: lastBuild)
 #   log-tail <folder> <project> [branch] [lines] Last N lines (default: 80)
 #   build <folder> <project> [branch]  Trigger a build (default: development)
+#   build-with-params <folder> <project> [branch] KEY=value [KEY=value ...]
+#                                      Trigger a parameterized build via /buildWithParameters
 #   health <folder>                    Health summary for all multibranch jobs in a folder
 #
 # Usage:
@@ -193,6 +195,66 @@ cmd_build() {
   fi
 }
 
+cmd_build_with_params() {
+  if [[ $# -lt 3 ]]; then
+    cat >&2 <<'USAGE'
+Usage: jenkins-api.sh build-with-params <folder> <project> [branch] KEY=value [KEY=value ...]
+
+Triggers a parameterized build via /buildWithParameters.
+Branch defaults to "development". Each KEY=value pair is form-encoded and
+POSTed as a build parameter. To discover a job's parameters, see
+workflows/build-params.md.
+
+Example:
+  jenkins-api.sh build-with-params backend my-service master DEPLOY_ENV=staging RUN_TESTS=true
+USAGE
+    return 1
+  fi
+  require_creds
+  local folder="$1" project="$2"
+  shift 2
+  local branch="development"
+  if [[ $# -gt 0 && "$1" != *=* ]]; then
+    branch="$1"
+    shift
+  fi
+  if [[ $# -eq 0 ]]; then
+    echo "❌ build-with-params requires at least one KEY=value pair" >&2
+    return 1
+  fi
+  local form_args=()
+  local pair key value
+  for pair in "$@"; do
+    if [[ "$pair" != *=* ]]; then
+      echo "❌ Invalid parameter (expected KEY=value): $pair" >&2
+      return 1
+    fi
+    key="${pair%%=*}"
+    value="${pair#*=}"
+    if [[ -z "$key" ]]; then
+      echo "❌ Empty parameter name in: $pair" >&2
+      return 1
+    fi
+    form_args+=(--data-urlencode "$key=$value")
+  done
+  local url="$JENKINS_URL/job/$folder/job/$project/job/$branch/buildWithParameters"
+  local code
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    -u "$JENKINS_USER:$JENKINS_API_TOKEN" \
+    "${form_args[@]}" \
+    "$url")
+  if [[ "$code" == "201" ]]; then
+    echo "✅ Parameterized build triggered: $folder/$project/$branch"
+    echo "   Params: $*"
+    echo "   URL: $JENKINS_URL/job/$folder/job/$project/job/$branch/"
+  else
+    echo "❌ Failed to trigger parameterized build (HTTP $code)" >&2
+    echo "   URL: $url" >&2
+    echo "   Params: $*" >&2
+    return 1
+  fi
+}
+
 cmd_health() {
   require_creds
   local folder="$1"
@@ -211,13 +273,30 @@ user=os.environ['JENKINS_USER']
 token=os.environ['JENKINS_API_TOKEN']
 creds=base64.b64encode(f'{user}:{token}'.encode()).decode()
 folder='$folder'
+FALLBACK_BRANCHES=['development','master']
+
+def discover_branches(project):
+  burl=f'{url}/job/{folder}/job/{project}/api/json?tree=jobs[name]'
+  req=urllib.request.Request(burl)
+  req.add_header('Authorization',f'Basic {creds}')
+  with urllib.request.urlopen(req,timeout=5) as resp:
+    pd=json.loads(resp.read())
+  names=[b.get('name') for b in pd.get('jobs',[]) if b.get('name')]
+  if not names:
+    raise ValueError('no branches returned')
+  return names
 
 for j in data.get('jobs',[]):
   name=j['name']
   cls=j.get('_class','')
   if 'MultiBranch' not in cls:
     continue
-  for branch in ['development','master']:
+  try:
+    branches=discover_branches(name)
+  except Exception as e:
+    print(f'WARNING: branch discovery failed for {folder}/{name} ({e}); falling back to {FALLBACK_BRANCHES}',file=sys.stderr)
+    branches=FALLBACK_BRANCHES
+  for branch in branches:
     burl=f'{url}/job/{folder}/job/{name}/job/{branch}/lastBuild/api/json?tree=result,timestamp'
     req=urllib.request.Request(burl)
     req.add_header('Authorization',f'Basic {creds}')
@@ -249,10 +328,11 @@ case "$cmd" in
   log)       cmd_log "$@" ;;
   log-tail)  cmd_log_tail "$@" ;;
   build)     cmd_build "$@" ;;
+  build-with-params) cmd_build_with_params "$@" ;;
   health)    cmd_health "$@" ;;
   *)
     echo "Unknown command: ${cmd:-(none)}" >&2
-    echo "Commands: whoami | folders | jobs | branches | status | log | log-tail | build | health" >&2
+    echo "Commands: whoami | folders | jobs | branches | status | log | log-tail | build | build-with-params | health" >&2
     exit 1
     ;;
 esac
