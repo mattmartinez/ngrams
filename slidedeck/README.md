@@ -69,6 +69,8 @@ read the last 3 PR descriptions on acme-api — /slidedeck what we shipped this 
 - **Include quotable principles** if someone said something sharp — e.g. "emphasize: the owner of the data is the producer" becomes a dedicated slide.
 - **Iterate after.** Ask for changes: "swap slides 4 and 5", "add a cost comparison slide after the architecture section", "the flow diagram should show the error path too".
 - **Press `?` while presenting** to open the keyboard help overlay listing every navigation shortcut; press `?` or `Escape` to dismiss it.
+- **Press `N` to toggle speaker notes.** Any slide can include a `.speaker-notes` block — it stays hidden by default, shows as a fixed bottom panel when toggled on, and never appears in print.
+- **Use the theme toggle in the nav bar** to switch between the default dark palette and the light-theme palette; your choice is saved in `localStorage` under `slidedeck.theme` and survives reloads.
 
 ## Output
 

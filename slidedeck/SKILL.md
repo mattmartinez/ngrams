@@ -741,6 +741,96 @@ document.addEventListener('keydown', e => {
 </div>
 ```
 
+### Light/Dark Theme Toggle
+
+A theme switcher that flips the deck between dark (default) and light palettes. The choice persists in `localStorage` under the key `slidedeck.theme` so reloads keep the user's last preference. The active theme is applied by toggling a `light-theme` class on `<html>` (the `:root` element), which lets a single CSS block override every variable the dark `:root` defines.
+
+**CSS palette** — append this `:root.light-theme` block to the CSS Custom Properties section. Every variable is restated with light-mode values; accent colors are darkened from their dark-mode counterparts to maintain WCAG AA contrast (≥4.5:1) against the new `--bg-base`:
+
+```css
+:root.light-theme {
+  /* Backgrounds — lightest to darkest */
+  --bg-base: #f7f9fc;            /* page background, nav background */
+  --bg-primary: #ffffff;         /* code block inner background */
+  --bg-surface: #eef2f8;         /* card backgrounds */
+  --bg-surface-raised: #dde4ef;  /* hover states on nav buttons */
+  --border: #ccd4e0;             /* card borders, table borders, nav border */
+  --border-bright: #aab5c6;      /* emphasized borders */
+
+  /* Text — darkest to dimmest */
+  --text-primary: #0b1120;       /* ~17:1 against --bg-base */
+  --text-secondary: #3d4a63;     /* ~8:1 against --bg-base */
+  --text-dim: #6b7894;           /* ~4.6:1 against --bg-base */
+
+  /* Semantic accent colors — darkened for AA contrast on light bg */
+  --blue: #2563eb;
+  --blue-dim: rgba(37,99,235,.10);
+  --cyan: #0891b2;
+  --cyan-dim: rgba(8,145,178,.10);
+  --green: #15803d;
+  --green-dim: rgba(21,128,61,.10);
+  --red: #c2362d;
+  --red-dim: rgba(194,54,45,.10);
+  --orange: #b8651b;
+  --orange-dim: rgba(184,101,27,.10);
+  --purple: #6d4ce6;
+  --purple-dim: rgba(109,76,230,.10);
+  --yellow: #a37908;
+  --yellow-dim: rgba(163,121,8,.10);
+}
+```
+
+A few rules in the base stylesheet hardcode the dark base color (`rgba(6,9,15,.92)` on `.nav` and `rgba(6,9,15,.94)` on the speaker-notes panel). Add these light-mode overrides alongside the palette so the chrome doesn't fight the page color:
+
+```css
+:root.light-theme .nav { background: rgba(247,249,252,.92); }
+:root.light-theme body.notes-visible .slide.active .speaker-notes {
+  background: rgba(247,249,252,.94);
+}
+```
+
+**HTML** — add a theme-toggle button inside the existing `<nav class="nav">` block, between the counter and the next button. `aria-pressed` reflects the current theme so screen readers announce the state:
+
+```html
+<nav class="nav">
+  <button id="prevBtn" onclick="go(-1)">← Prev</button>
+  <span class="ctr" id="ctr">1 / 20</span>
+  <button id="themeBtn" type="button" aria-pressed="false" aria-label="Switch to light theme">☾</button>
+  <button id="nextBtn" onclick="go(1)">Next →</button>
+</nav>
+```
+
+**JavaScript** — extend the navigation script with a theme load on init, a click handler on the button, and `localStorage` persistence. Storage reads and writes are wrapped in `try`/`catch` so a broken or quota-full `localStorage` (Safari private mode, etc.) never breaks navigation:
+
+```javascript
+const themeBtn = document.getElementById('themeBtn');
+const THEME_KEY = 'slidedeck.theme';
+
+function applyTheme(theme) {
+  const isLight = theme === 'light';
+  document.documentElement.classList.toggle('light-theme', isLight);
+  themeBtn.setAttribute('aria-pressed', String(isLight));
+  themeBtn.textContent = isLight ? '☀' : '☾';
+  themeBtn.setAttribute('aria-label', isLight ? 'Switch to dark theme' : 'Switch to light theme');
+}
+
+function loadTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (_) {}
+  applyTheme(saved === 'light' ? 'light' : 'dark');
+}
+
+themeBtn.addEventListener('click', () => {
+  const next = document.documentElement.classList.contains('light-theme') ? 'dark' : 'light';
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+});
+
+loadTheme();
+```
+
+Call `loadTheme()` once at script init, **before** the first `show(0)` call, so the first paint already uses the saved palette and there's no dark-to-light flash on reload.
+
 ---
 
 ## Slide Types
