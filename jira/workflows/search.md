@@ -24,6 +24,8 @@ Limit to 20 results unless user asks for more.
 
 Resolve the project key from `~/.gsd/jira-projects.json` if needed (same resolution as create workflow).
 
+The script pre-validates JQL locally (unmatched double quotes, bare leading/trailing `AND`/`OR`) and prints `Malformed JQL: <reason>` to stderr with a non-zero exit before any API call — surface that message verbatim so the user can fix the query without an opaque 400.
+
 ```bash
 source ~/.gsd/jira.env
 node ~/.gsd/agent/skills/jira/scripts/jira-api.js search \
