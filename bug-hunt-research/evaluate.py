@@ -18,6 +18,7 @@ Outputs a JSON object with all scores plus detailed match info, and
 appends a one-line summary to results.tsv if it exists.
 """
 
+import argparse
 import json
 import os
 import re
@@ -254,27 +255,48 @@ def difficulty_breakdown(manifest: dict, matched_indices: set[int]) -> dict:
     return tiers
 
 
+def category_breakdown(manifest: dict, matched_indices: set[int]) -> dict:
+    """Return recall per bug category."""
+    cats: dict[str, dict] = {}
+    for i, bug in enumerate(manifest["bugs"]):
+        c = bug.get("category", "unknown")
+        cats.setdefault(c, {"total": 0, "found": 0})
+        cats[c]["total"] += 1
+        if i in matched_indices:
+            cats[c]["found"] += 1
+    for c in cats.values():
+        c["recall"] = round(c["found"] / c["total"], 4) if c["total"] else 0.0
+    return cats
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python evaluate.py <referee_output> <manifest.json>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Evaluate bug-hunt results against the benchmark manifest."
+    )
+    parser.add_argument("referee_output", help="Path to referee output file")
+    parser.add_argument("manifest", help="Path to benchmark manifest JSON")
+    parser.add_argument(
+        "--description",
+        default="",
+        help="Short description of this experiment run (appended to results.tsv)",
+    )
+    args = parser.parse_args()
 
-    output_path = Path(sys.argv[1])
-    manifest_path = Path(sys.argv[2])
+    output_path = Path(args.referee_output)
+    manifest_path = Path(args.manifest)
 
     text = output_path.read_text(encoding="utf-8")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     confirmed = parse_referee_output(text)
     scores = compute_scores(manifest, confirmed)
-    breakdown = difficulty_breakdown(
-        manifest, set(scores["details"]["matched_planted_indices"])
-    )
-    scores["difficulty_breakdown"] = breakdown
+    matched_indices = set(scores["details"]["matched_planted_indices"])
+    scores["difficulty_breakdown"] = difficulty_breakdown(manifest, matched_indices)
+    scores["category_breakdown"] = category_breakdown(manifest, matched_indices)
 
     print(json.dumps(scores, indent=2))
 
@@ -282,7 +304,11 @@ def main():
     tsv = Path("results.tsv")
     if tsv.exists():
         commit = os.popen("git rev-parse --short HEAD 2>/dev/null").read().strip() or "n/a"
-        line = f"{commit}\t{scores['composite']:.6f}\t{scores['f1']:.4f}\t{scores['recall']:.4f}\t{scores['precision']:.4f}\t{scores['trap_resistance']:.4f}\n"
+        line = (
+            f"{commit}\t{scores['composite']:.6f}\t{scores['f1']:.4f}\t"
+            f"{scores['recall']:.4f}\t{scores['precision']:.4f}\t"
+            f"{scores['trap_resistance']:.4f}\t{args.description}\n"
+        )
         with open(tsv, "a") as f:
             f.write(line)
 
