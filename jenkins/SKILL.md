@@ -62,6 +62,7 @@ commands is `development` — override with a third argument.
 |-----------|----------|
 | "check build", "build status", "is it green", "how's the build" | `workflows/status.md` |
 | "trigger a build", "run the pipeline", "build it", "deploy" | `workflows/build.md` |
+| "build with parameters", "parameterized build", "pass params", "deploy with options" | `workflows/build-params.md` |
 | "why did it fail", "build logs", "console output", "what broke" | `workflows/diagnose.md` |
 | "list jobs", "what's on Jenkins", "show pipelines" | `workflows/list.md` |
 | "set up Jenkins", credentials missing, env file not found | `workflows/setup.md` |
