@@ -115,6 +115,19 @@ cmux focus-pane --pane <target-pane> --workspace $CMUX_WORKSPACE_ID
 cmux new-pane --type browser --direction down --workspace $CMUX_WORKSPACE_ID --url <url>
 ```
 
+**If placement fails:** If `cmux browser open-split` already ran and the browser landed as a tab instead of the intended split, list surfaces to find the stray browser's ID, close it, then re-create the split at the right location:
+
+```bash
+cmux surface list --workspace $CMUX_WORKSPACE_ID
+# Example row (look for type=browser):
+# surface:browser-7f3a  type=browser  workspace=ws-1  pane=tab-2  url=https://example.com
+cmux close-surface --surface surface:browser-7f3a
+cmux focus-pane --pane <target-pane> --workspace $CMUX_WORKSPACE_ID
+cmux new-pane --type browser --direction down --workspace $CMUX_WORKSPACE_ID --url <url>
+```
+
+Parse the `type=browser` row from `cmux surface list` to identify the surface ID before issuing the close/recreate sequence — do not guess the ID.
+
 | User says | Command |
 |-----------|---------|
 | open browser / browse URL | `cmux new-pane --type browser --direction down --url <url>` (focus target pane first) |
