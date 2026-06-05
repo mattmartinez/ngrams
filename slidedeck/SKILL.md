@@ -412,6 +412,27 @@ document.addEventListener('keydown', e => {
 });
 ```
 
+### Print / PDF Export
+
+The slide engine stacks slides absolutely and shows one at a time, so a raw browser "Save as PDF" emits only a single slide. Append this `@media print` block to the `<style>` so the deck exports as one slide per page:
+
+```css
+@media print {
+  .nav, .pbar, .help-overlay { display: none !important; }   /* hide all chrome */
+  html, body { height: auto !important; overflow: visible !important; }
+  .deck { position: static; width: auto; height: auto; }
+  .slide {                                 /* reveal every slide, one per page */
+    position: relative; inset: auto;
+    opacity: 1 !important; transform: none !important; pointer-events: auto;
+    width: 100%; min-height: 100vh; box-sizing: border-box;
+    break-after: page; page-break-after: always;
+  }
+  .slide:last-child { break-after: auto; page-break-after: auto; }
+}
+```
+
+To export: open the deck, **Print → Save as PDF**, choose **Landscape**, and enable **Background graphics** (Chrome) / **Print backgrounds** (Safari) so the dark theme survives — without that toggle the browser drops slide backgrounds and the deck prints on white.
+
 ---
 
 ## Layout Containers

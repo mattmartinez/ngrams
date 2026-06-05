@@ -198,10 +198,10 @@ cmd_status() {
     echo "❌ No builds found for $folder/$project/$branch"
     return 1
   fi
-  python3 -c "
-import json,sys
+  printf '%s' "$data" | J_LABEL="$folder/$project/$branch" J_BASE="$base" python3 -c "
+import json,sys,os
 from datetime import datetime
-d=json.loads('''$data''')
+d=json.load(sys.stdin)
 ts=datetime.fromtimestamp(d['timestamp']/1000).strftime('%Y-%m-%d %H:%M:%S')
 dur=d['duration']/1000
 mins=int(dur//60)
@@ -210,10 +210,10 @@ result=d.get('result','IN PROGRESS') if not d.get('building') else 'BUILDING'
 sym={'SUCCESS':'✅','FAILURE':'❌','UNSTABLE':'⚠️','ABORTED':'⏹️','BUILDING':'🔄','IN PROGRESS':'🔄'}.get(result,'❓')
 print(f'{sym} {result}')
 print(f'   Build:    {d[\"displayName\"]} (#{d[\"number\"]})')
-print(f'   Branch:   $folder/$project/$branch')
+print(f'   Branch:   {os.environ[\"J_LABEL\"]}')
 print(f'   Duration: {mins}m {secs}s')
 print(f'   When:     {ts}')
-print(f'   URL:      $base/{d[\"number\"]}/')
+print(f'   URL:      {os.environ[\"J_BASE\"]}/{d[\"number\"]}/')
 "
 }
 
