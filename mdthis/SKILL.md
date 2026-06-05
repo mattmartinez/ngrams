@@ -32,7 +32,7 @@ $ARGUMENTS
    - Open questions or next steps
 
 3. **Write the file.** Use the Write tool to save the markdown file.
-   - **Filename:** `YYYY-MM-DD-HHMMSS-<short-descriptor>.md` where the timestamp is the current local time and the descriptor is a short kebab-case summary (e.g., `2026-03-02-231500-questdb-wal-findings.md`, `2026-03-02-231500-auth-refactor-pr.md`).
+   - **Filename:** `YYYY-MM-DD-HHMMSS-<short-descriptor>.md`. Get the timestamp from the shell — run `date +%Y-%m-%d-%H%M%S` — never guess it from context. The descriptor is a short kebab-case summary (e.g., `2026-03-02-231500-questdb-wal-findings.md`, `2026-03-02-231500-auth-refactor-pr.md`).
    - **Location:** Always write to `local/` at the root of where Claude was launched in.
 
 4. **Tell the user** the filename and a one-line summary of what you wrote. Keep it brief.

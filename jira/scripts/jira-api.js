@@ -312,6 +312,24 @@ function validateJql(jql) {
   return null;
 }
 
+// Paginate /search/jql via nextPageToken, accumulating up to maxTotal issues.
+// The bounded search API returns at most one page and no `total`, so callers
+// learn whether more matches exist beyond the cap via the `truncated` flag.
+async function searchIssues(jql, fields, maxTotal) {
+  const issues = [];
+  let token = null;
+  while (issues.length < maxTotal) {
+    const body = { jql, maxResults: Math.min(100, maxTotal - issues.length), fields };
+    if (token) body.nextPageToken = token;
+    const data = await request('POST', '/search/jql', body);
+    const page = data.issues || [];
+    issues.push(...page);
+    token = (!data.isLast && data.nextPageToken) ? data.nextPageToken : null;
+    if (!token || page.length === 0) break;
+  }
+  return { issues, truncated: token !== null };
+}
+
 async function cmdSearch(args) {
   requireCreds();
 
@@ -331,25 +349,22 @@ async function cmdSearch(args) {
     process.exit(1);
   }
 
-  const data = await request(
-    'POST',
-    '/search/jql',
-    {
-      jql,
-      maxResults: max,
-      fields: ['summary', 'issuetype', 'priority', 'status', 'assignee'],
-    }
+  const { issues, truncated } = await searchIssues(
+    jql,
+    ['summary', 'issuetype', 'priority', 'status', 'assignee'],
+    max
   );
 
-  const issues = data.issues || [];
-  const total = data.total ?? issues.length;
   if (!issues.length) {
     console.log('No issues found.');
     console.log(`JQL: ${jql}`);
     return;
   }
 
-  console.log(`Found ${total} issue(s) (showing ${issues.length}):\n`);
+  const count = truncated
+    ? `${issues.length}+ (capped at --max ${max}; raise it or narrow the JQL for more)`
+    : `${issues.length}`;
+  console.log(`Found ${count} issue(s):\n`);
   console.log('KEY        TYPE     PRI     STATUS                SUMMARY');
   console.log('─'.repeat(90));
 
@@ -439,17 +454,21 @@ async function cmdBulkUpdate(args) {
     process.exit(1);
   }
 
-  const data = await request(
-    'POST',
-    '/search/jql',
-    { jql, maxResults: max, fields: ['summary', 'status', 'priority', 'assignee', 'labels'] }
+  const { issues, truncated } = await searchIssues(
+    jql,
+    ['summary', 'status', 'priority', 'assignee', 'labels'],
+    max
   );
-  const issues = data.issues || [];
 
   if (!issues.length) {
     console.log('No issues match the JQL — nothing to update.');
     console.log(`JQL: ${jql}`);
     return;
+  }
+
+  if (truncated) {
+    console.log(`⚠️  More than ${max} issues match — only the first ${max} will be processed.`);
+    console.log(`    Raise --max or narrow the JQL to cover the rest.\n`);
   }
 
   console.log(`Matched ${issues.length} issue(s):`);
