@@ -14,7 +14,7 @@ deploy target, version string, boolean flags, etc.). Use this instead of
    parameters the pipeline declares and their default values:
 
 ```bash
-source ~/.gsd/jenkins.env
+source ~/.claude/jenkins.env
 curl -sf -u "$JENKINS_USER:$JENKINS_API_TOKEN" \
   "$JENKINS_URL/job/<folder>/job/<project>/job/<branch>/api/json?tree=property[parameterDefinitions[name,type,defaultParameterValue[value],choices]]"
 ```

@@ -1,6 +1,6 @@
 ## Project Map
 
-The file `~/.gsd/jira-projects.json` maps short human aliases to Jira project
+The file `~/.claude/jira-projects.json` maps short human aliases to Jira project
 keys. It is created during setup and can be edited manually at any time.
 
 ### Schema
@@ -37,7 +37,7 @@ When creating a ticket, resolve the project key in this order:
 1. **Explicit alias in user message** — "put this in the backend backlog", "file it as a BE ticket"
    → match against `alias` or `key` field (case-insensitive)
 
-2. **CWD context** — if a `.gsd/PROJECT.md` exists in the current working directory,
+2. **CWD context** — if a `.claude/PROJECT.md` exists in the current working directory,
    look for a line like:
    ```
    Jira Project: BE
@@ -54,7 +54,7 @@ When creating a ticket, resolve the project key in this order:
 
 ```bash
 # Open and edit directly
-nano ~/.gsd/jira-projects.json
+nano ~/.claude/jira-projects.json
 ```
 
 Or ask the agent: *"add a project — key BE, call it backend"*

@@ -1,8 +1,7 @@
 .bg-shell
 
-# ── GSD baseline (auto-generated) ──
-.gsd
-.gsd-id
+# ── Claude Code (local state) ──
+.claude/settings.local.json
 .mcp.json
 .bg-shell/
 .DS_Store

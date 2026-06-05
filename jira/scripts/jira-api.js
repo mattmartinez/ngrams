@@ -2,7 +2,7 @@
 /**
  * jira-api.js — Thin Jira Cloud REST client for agent use.
  *
- * Reads credentials from env vars (source ~/.gsd/jira.env before calling).
+ * Reads credentials from env vars (source ~/.claude/jira.env before calling).
  *
  * Commands:
  *   whoami                        Verify auth, print current user
@@ -34,7 +34,7 @@
  *   --apply                       Actually perform the updates (default: dry run)
  *
  * Usage:
- *   source ~/.gsd/jira.env
+ *   source ~/.claude/jira.env
  *   node jira-api.js whoami
  *   node jira-api.js create --project CD --summary "Fix thing" --type Bug
  *   node jira-api.js search --jql 'project = CD AND statusCategory != Done'
@@ -59,7 +59,7 @@ function requireCreds() {
   if (!TOKEN)    missing.push('JIRA_API_TOKEN');
   if (missing.length) {
     console.error(`Missing credentials: ${missing.join(', ')}`);
-    console.error('Run: source ~/.gsd/jira.env');
+    console.error('Run: source ~/.claude/jira.env');
     process.exit(1);
   }
 }

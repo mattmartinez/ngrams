@@ -4,18 +4,18 @@ description: >
   Create, search, and manage Jira tickets from any terminal session. Use when
   the user says "make this a Jira ticket", "file a bug in Jira", "create a
   story for X", "put this in the backlog", "search Jira for Y", or any request
-  to interact with Jira. Credentials are stored in ~/.gsd/jira.env and work
+  to interact with Jira. Credentials are stored in ~/.claude/jira.env and work
   across all projects.
 ---
 
 <essential_principles>
 ## Credential Lookup
 
-Credentials live at `~/.gsd/jira.env` — outside any repo, available from every terminal.
+Credentials live at `~/.claude/jira.env` — outside any repo, available from every terminal.
 
 Load with:
 ```bash
-source ~/.gsd/jira.env
+source ~/.claude/jira.env
 # Provides: JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
 ```
 
@@ -27,11 +27,11 @@ env vars — never hardcode credentials anywhere.
 ## Project Config
 
 Each project maps a short alias to a Jira project key. The map lives at
-`~/.gsd/jira-projects.json`. See `references/project-map.md` for format.
+`~/.claude/jira-projects.json`. See `references/project-map.md` for format.
 
 Resolve the right project key before creating a ticket:
 1. If the user named a project/board explicitly → look it up in the map
-2. If there's a `.gsd/PROJECT.md` in the current working directory → read the
+2. If there's a `.claude/PROJECT.md` in the current working directory → read the
    `Jira Project` field if present
 3. Otherwise → ask the user which project (show a short list from the map)
 
@@ -50,7 +50,7 @@ Always build descriptions with those helpers, never with raw JSON.
 | "make this a ticket", "file a bug", "create a story", "add to backlog" | `workflows/create.md` |
 | "search Jira", "find tickets for", "what tickets exist for" | `workflows/search.md` |
 | "bulk update", "reassign all of these", "relabel matching tickets", "transition every X to Y" | `workflows/bulk-update.md` |
-| "set up Jira", credentials missing, `~/.gsd/jira.env` not found | `workflows/setup.md` |
+| "set up Jira", credentials missing, `~/.claude/jira.env` not found | `workflows/setup.md` |
 
 When intent is clear, go straight to the workflow without asking.
 When the user gives a blob of context (bug report, conversation, code review

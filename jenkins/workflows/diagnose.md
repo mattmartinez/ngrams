@@ -9,7 +9,7 @@ User wants to understand why a build failed, or wants to see build logs.
 
 2. **Check current status first:**
 ```bash
-source ~/.gsd/jenkins.env
+source ~/.claude/jenkins.env
 bash <skill_dir>/scripts/jenkins-api.sh status <folder> <project> [branch]
 ```
 

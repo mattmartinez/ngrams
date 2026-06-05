@@ -37,12 +37,12 @@ Keep it factual. Don't pad. If the user gave you a bug report or code finding, p
 **Step 3: Resolve the project**
 
 ```bash
-cat ~/.gsd/jira-projects.json
+cat ~/.claude/jira-projects.json
 ```
 
 Resolution order (from `references/project-map.md`):
 1. User named a project/board explicitly → find alias in map
-2. CWD has a `.gsd/PROJECT.md` with a `Jira Project:` field → use that key
+2. CWD has a `.claude/PROJECT.md` with a `Jira Project:` field → use that key
 3. Otherwise → show the project list and ask
 
 **Step 4: Show the draft**
@@ -73,8 +73,8 @@ Post this? [yes / edit / cancel]
 **Step 6: Post the ticket**
 
 ```bash
-source ~/.gsd/jira.env
-node ~/.gsd/agent/skills/jira/scripts/jira-api.js create \
+source ~/.claude/jira.env
+node ~/.claude/skills/jira/scripts/jira-api.js create \
   --project '{PROJECT_KEY}' \
   --summary '{summary}' \
   --type '{issueType}' \

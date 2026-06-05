@@ -7,7 +7,7 @@ User wants to see what's on Jenkins — folders, jobs, or branches.
 
 ### Top-level folders
 ```bash
-source ~/.gsd/jenkins.env
+source ~/.claude/jenkins.env
 bash <skill_dir>/scripts/jenkins-api.sh folders
 ```
 

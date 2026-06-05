@@ -11,7 +11,7 @@ User wants to check the build status of a project or branch.
 
 2. **Check status:**
 ```bash
-source ~/.gsd/jenkins.env
+source ~/.claude/jenkins.env
 bash <skill_dir>/scripts/jenkins-api.sh status <folder> <project> [branch]
 ```
 Branch defaults to `development` if not specified.

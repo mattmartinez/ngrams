@@ -12,7 +12,7 @@ Run an autonomous, indefinite experiment loop that modifies the bug-hunt skill's
 
 The skill files to optimize live in:
 ```
-~/.gsd/agent/skills/bug-hunt/
+~/.claude/skills/bug-hunt/
 ├── SKILL.md                    # orchestration (modify sparingly)
 └── prompts/
     ├── hunter.md               # primary target for optimization
@@ -22,7 +22,7 @@ The skill files to optimize live in:
 
 The benchmark suite and evaluation harness live in:
 ```
-~/.gsd/agent/skills/bug-hunt-research/
+~/.claude/skills/bug-hunt-research/
 ├── benchmarks/
 │   ├── easy/vuln_api_server.py        # 7 planted bugs (SQL injection, MD5, path traversal, etc.)
 │   ├── medium/data_pipeline.py        # 4 planted bugs (race conditions, off-by-one, silent exceptions)
@@ -50,7 +50,7 @@ If no tag is provided, generate one from today's date.
 ### 1.1 Create a branch
 
 ```bash
-cd ~/.gsd/agent/skills
+cd ~/.claude/agent/skills
 git checkout -b bug-hunt-research/<tag>
 ```
 
@@ -68,7 +68,7 @@ Read completely — do not skim:
 
 ### 1.3 Initialize tracking
 
-Create `results.tsv` in `~/.gsd/agent/skills/bug-hunt-research/`:
+Create `results.tsv` in `~/.claude/skills/bug-hunt-research/`:
 
 ```
 commit	composite	f1	recall	precision	trap_resistance	description
@@ -84,9 +84,9 @@ Run the current unmodified bug-hunt prompts against all benchmarks and score the
 
 **How to run a single evaluation:**
 
-1. Use the `subagent` tool to run the 3-agent bug-hunt pipeline (hunter → skeptic → referee) against the benchmark directory `~/.gsd/agent/skills/bug-hunt-research/benchmarks/`
+1. Use the `subagent` tool to run the 3-agent bug-hunt pipeline (hunter → skeptic → referee) against the benchmark directory `~/.claude/skills/bug-hunt-research/benchmarks/`
 2. Capture the referee's final output to a temp file
-3. Run: `python ~/.gsd/agent/skills/bug-hunt-research/evaluate.py <referee_output_file> ~/.gsd/agent/skills/bug-hunt-research/benchmarks/manifest.json`
+3. Run: `python ~/.claude/skills/bug-hunt-research/evaluate.py <referee_output_file> ~/.claude/skills/bug-hunt-research/benchmarks/manifest.json`
 4. Record the composite score and component scores
 
 ### 1.5 Begin experiments
@@ -220,7 +220,7 @@ Contents:
 
 ## Constraints — Hard Rules
 
-1. **Only modify files in `~/.gsd/agent/skills/bug-hunt/`**. Never modify benchmark files or manifest.json.
+1. **Only modify files in `~/.claude/skills/bug-hunt/`**. Never modify benchmark files or manifest.json.
 2. **Never modify `evaluate.py`**. The scoring function is sacred ground truth.
 3. **The manifest is ground truth**. If the bug-hunt doesn't find a planted bug, that's a bug-hunt problem, not a manifest problem.
 4. **One variable at a time**. Each experiment changes ONE thing about ONE prompt.

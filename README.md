@@ -15,21 +15,21 @@ Cognitive patterns for AI coding agents. Portable skill modules that slot into a
 | **bug-hunt** | Adversarial 3-agent bug sweep (Hunter → Skeptic → Referee) |
 | **bug-hunt-research** | Autonomous prompt optimization loop for bug-hunt. Runs bug-hunt against benchmark codebases with planted bugs & traps, scores results, keeps or reverts prompt changes. Modeled on autoresearch. |
 | **cmux** | Claude Code integration with cmux terminal multiplexer — splits, workspaces, sidebar, notifications |
-| **jenkins** | Interact with Jenkins CI/CD — list jobs, check build status, trigger builds, read console output, diagnose failures. Credentials stored in `~/.gsd/jenkins.env`. |
-| **jira** | Create and search Jira tickets from any terminal session. Credentials stored in `~/.gsd/jira.env`, project aliases in `~/.gsd/jira-projects.json`. Say "make this a Jira ticket" and it handles the rest. |
+| **jenkins** | Interact with Jenkins CI/CD — list jobs, check build status, trigger builds, read console output, diagnose failures. Credentials stored in `~/.claude/jenkins.env`. |
+| **jira** | Create and search Jira tickets from any terminal session. Credentials stored in `~/.claude/jira.env`, project aliases in `~/.claude/jira-projects.json`. Say "make this a Jira ticket" and it handles the rest. |
 | **mdthis** | Generate markdown artifacts from conversation context |
+| **red-team** | Adversarial 3-agent attack-path assessment (Attacker → Blue Team → Arbiter). Enumerates attack surface, builds realistic attack chains, and verifies which are actually exploitable. Generic across project shapes (service, CLI, library, daemon, data pipeline, IaC). |
 | **slidedeck** | Build polished, self-contained HTML slide deck presentations from source material |
 
 ## Install
 
-Symlink into your agent's skill directory:
+Sync each skill into your Claude Code skills directory:
 
 ```bash
-./install.sh ~/.gsd/agent/skills     # pi + GSD 2.0
-./install.sh ~/.claude/skills         # claude code
+./install.sh ~/.claude/skills
 ```
 
-> **Note:** The `~/.gsd/agent/skills` path is specific to the [GSD](https://github.com/gsd-framework/gsd) extension for [pi](https://github.com/anthropics/pi). Other pi extensions may use a different skill directory.
+> **Note:** `install.sh` copies every skill directory into the target. `~/.claude/skills` is the default skill directory for [Claude Code](https://claude.com/claude-code); point it elsewhere if your harness uses a different location.
 
 ## One-time setup for skills with external APIs
 
@@ -37,9 +37,9 @@ Some skills need credentials stored outside any repo:
 
 | Skill | File | What to put in it |
 |-------|------|-------------------|
-| **jira** | `~/.gsd/jira.env` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
-| | `~/.gsd/jira-projects.json` | alias → project key map |
-| **jenkins** | `~/.gsd/jenkins.env` | `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN` |
+| **jira** | `~/.claude/jira.env` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
+| | `~/.claude/jira-projects.json` | alias → project key map |
+| **jenkins** | `~/.claude/jenkins.env` | `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN` |
 
 Run `/jira setup` or `/jenkins setup` in any session to be walked through credential setup interactively.
 
