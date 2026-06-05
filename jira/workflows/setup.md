@@ -31,13 +31,13 @@ keys:
     required: true
 ```
 
-Write to destination: `dotenv`, envFilePath: `~/.gsd/jira.env`
+Write to destination: `dotenv`, envFilePath: `~/.claude/jira.env`
 
 **Step 2: Create project map**
 
-Check if `~/.gsd/jira-projects.json` already exists:
+Check if `~/.claude/jira-projects.json` already exists:
 ```bash
-cat ~/.gsd/jira-projects.json 2>/dev/null
+cat ~/.claude/jira-projects.json 2>/dev/null
 ```
 
 If it doesn't exist, create a starter file:
@@ -48,7 +48,7 @@ If it doesn't exist, create a starter file:
 }
 ```
 
-Write to `~/.gsd/jira-projects.json`.
+Write to `~/.claude/jira-projects.json`.
 
 **Step 3: Optionally discover projects**
 
@@ -56,20 +56,20 @@ Ask: "Would you like me to fetch your Jira project list so you can pick which on
 
 If yes:
 ```bash
-source ~/.gsd/jira.env
-node ~/.gsd/agent/skills/jira/scripts/jira-api.js list-projects
+source ~/.claude/jira.env
+node ~/.claude/skills/jira/scripts/jira-api.js list-projects
 ```
 
 Show the project list and let the user select which ones to add entries for.
 For each selected project, ask for the alias they want to use (default: lowercase project key).
 
-Update `~/.gsd/jira-projects.json` with the chosen projects.
+Update `~/.claude/jira-projects.json` with the chosen projects.
 
 **Step 4: Verify**
 
 ```bash
-source ~/.gsd/jira.env
-node ~/.gsd/agent/skills/jira/scripts/jira-api.js whoami
+source ~/.claude/jira.env
+node ~/.claude/skills/jira/scripts/jira-api.js whoami
 ```
 
 A successful response shows the authenticated user's name and email.
@@ -78,7 +78,7 @@ Report: ✅ Jira connected as [name] ([email])
 </process>
 
 <success_criteria>
-- `~/.gsd/jira.env` exists with all three vars
-- `~/.gsd/jira-projects.json` exists
+- `~/.claude/jira.env` exists with all three vars
+- `~/.claude/jira-projects.json` exists
 - `whoami` command returns a valid user
 </success_criteria>

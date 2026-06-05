@@ -41,10 +41,10 @@ Follow these steps in exact order. Each agent runs as a separate subagent to ens
 
 ### Step 1: Read the prompt files
 
-Read these prompt files from the skill directory:
-- `~/.gsd/agent/skills/bug-hunt/prompts/hunter.md`
-- `~/.gsd/agent/skills/bug-hunt/prompts/skeptic.md`
-- `~/.gsd/agent/skills/bug-hunt/prompts/referee.md`
+Read these files using the skill directory variable:
+- `${CLAUDE_SKILL_DIR}/prompts/hunter.md`
+- `${CLAUDE_SKILL_DIR}/prompts/skeptic.md`
+- `${CLAUDE_SKILL_DIR}/prompts/referee.md`
 
 ### Step 1.1: Load profile (if present)
 

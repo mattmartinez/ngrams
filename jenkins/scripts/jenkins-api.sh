@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # jenkins-api.sh — Thin Jenkins REST client for agent use.
 #
-# Reads credentials from env vars (source ~/.gsd/jenkins.env before calling).
+# Reads credentials from env vars (source ~/.claude/jenkins.env before calling).
 #
 # Commands:
 #   whoami                             Verify auth, print Jenkins version
@@ -17,7 +17,7 @@
 #   health <folder>                    Health summary for all multibranch jobs in a folder
 #
 # Usage:
-#   source ~/.gsd/jenkins.env
+#   source ~/.claude/jenkins.env
 #   ./jenkins-api.sh whoami
 #   ./jenkins-api.sh jobs backend
 #   ./jenkins-api.sh status backend my-service development
@@ -40,7 +40,7 @@ require_creds() {
   [[ -z "$JENKINS_API_TOKEN" ]] && missing+=("JENKINS_API_TOKEN")
   if [[ ${#missing[@]} -gt 0 ]]; then
     echo "❌ Missing credentials: ${missing[*]}" >&2
-    echo "Run: source ~/.gsd/jenkins.env" >&2
+    echo "Run: source ~/.claude/jenkins.env" >&2
     exit 1
   fi
 }

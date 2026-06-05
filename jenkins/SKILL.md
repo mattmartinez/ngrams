@@ -5,17 +5,17 @@ description: >
   read console output, and diagnose failures. Use when the user says "check
   Jenkins", "build status", "trigger a build", "why did the build fail",
   "Jenkins logs", "run the pipeline", or any request to interact with Jenkins.
-  Credentials are stored in ~/.gsd/jenkins.env and work across all projects.
+  Credentials are stored in ~/.claude/jenkins.env and work across all projects.
 ---
 
 <essential_principles>
 ## Credential Lookup
 
-Credentials live at `~/.gsd/jenkins.env` — outside any repo, available from every terminal.
+Credentials live at `~/.claude/jenkins.env` — outside any repo, available from every terminal.
 
 Load with:
 ```bash
-source ~/.gsd/jenkins.env
+source ~/.claude/jenkins.env
 # Provides: JENKINS_URL, JENKINS_USER, JENKINS_API_TOKEN
 ```
 

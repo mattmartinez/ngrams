@@ -47,8 +47,8 @@ Always run without `--apply` first. The script lists matched issues and the
 planned change set, then exits without writing anything.
 
 ```bash
-source ~/.gsd/jira.env
-node ~/.gsd/agent/skills/jira/scripts/jira-api.js bulk-update \
+source ~/.claude/jira.env
+node ~/.claude/skills/jira/scripts/jira-api.js bulk-update \
   --jql '{JQL_QUERY}' \
   [--assignee {ACCOUNT_ID}] \
   [--status '{STATUS_NAME}'] \
@@ -91,7 +91,7 @@ and hard to undo.
 **Step 5: Apply**
 
 ```bash
-node ~/.gsd/agent/skills/jira/scripts/jira-api.js bulk-update \
+node ~/.claude/skills/jira/scripts/jira-api.js bulk-update \
   --jql '{JQL_QUERY}' \
   ...same flags... \
   --apply

@@ -15,7 +15,7 @@ User wants to trigger a Jenkins build.
 
 3. **Trigger the build:**
 ```bash
-source ~/.gsd/jenkins.env
+source ~/.claude/jenkins.env
 bash <skill_dir>/scripts/jenkins-api.sh build <folder> <project> [branch]
 ```
 
