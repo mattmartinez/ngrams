@@ -48,6 +48,7 @@ Always build descriptions with those helpers, never with raw JSON.
 | User says | Workflow |
 |-----------|----------|
 | "make this a ticket", "file a bug", "create a story", "add to backlog" | `workflows/create.md` |
+| "what does ACME-1234 say", "show/read ticket X" | Run `node ~/.claude/skills/jira/scripts/jira-api.js view ACME-1234` directly (no workflow) |
 | "search Jira", "find tickets for", "what tickets exist for" | `workflows/search.md` |
 | "bulk update", "reassign all of these", "relabel matching tickets", "transition every X to Y" | `workflows/bulk-update.md` |
 | "set up Jira", credentials missing, `~/.claude/jira.env` not found | `workflows/setup.md` |

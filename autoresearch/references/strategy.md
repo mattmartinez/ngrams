@@ -92,11 +92,11 @@ Changes to how the model is trained.
 - Try: different momentum schedules, warmup for momentum
 
 **LR schedule:**
-- Currently: linear warmup → constant → cosine cooldown
+- Currently: linear warmup → constant → linear warmdown to FINAL_LR_FRAC
 - `WARMUP_RATIO` (default 0.05) — fraction of budget for warmup
 - `WARMDOWN_RATIO` (default 0.5) — fraction of budget for cooldown
 - `FINAL_LR_FRAC` (default 0.0) — final LR as fraction of peak
-- Try: different warmup/cooldown ratios, WSD schedule, no warmdown
+- Try: different warmup/cooldown ratios, WSD schedule, cosine warmdown, no warmdown
 
 **Weight decay:**
 - Currently 0.2, decays linearly to 0 over training

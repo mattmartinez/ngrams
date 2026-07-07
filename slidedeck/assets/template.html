@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slide Deck</title>
+<!--
+  slidedeck engine template.
+  Copy this file, then replace the example slides inside <div class="deck"> with
+  your own. Keep the chrome (nav, progress bar, help overlay, script) as-is.
+  All CSS lives in the single <style> block; all JS in the single <script> block.
+  The only external fetch is Google Fonts (with a system-ui fallback offline).
+  One commented example of every slide type and component is included below.
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ===== CSS Custom Properties — every color references these, never raw hex ===== */
+:root {
+  /* Backgrounds — darkest to lightest */
+  --bg-base: #06090f;        /* page background, nav background */
+  --bg-primary: #0b1120;     /* code block inner background */
+  --bg-surface: #131c31;     /* card backgrounds */
+  --bg-surface-raised: #1a2742; /* hover states on nav buttons */
+  --border: #1e2d4a;         /* card borders, table borders, nav border */
+  --border-bright: #2a3f66;  /* emphasized borders (rarely used) */
+
+  /* Text — brightest to dimmest */
+  --text-primary: #e4eaf4;   /* headings, strong, bold content */
+  --text-secondary: #8494ad; /* body text, paragraphs, list items */
+  --text-dim: #4e5f7a;       /* eyebrow labels, captions, de-emphasized text */
+
+  /* Semantic accent colors — each has a specific meaning */
+  --blue: #5b9cf5;           /* existing systems, information, neutral highlights */
+  --blue-dim: rgba(91,156,245,.12);
+  --cyan: #36d8c0;           /* key concepts, primary accent, "the new thing" */
+  --cyan-dim: rgba(54,216,192,.10);
+  --green: #3dd68c;          /* solutions, additions, positive outcomes, things to build */
+  --green-dim: rgba(61,214,140,.10);
+  --red: #f06b6b;            /* problems, deletions, danger, things to kill */
+  --red-dim: rgba(240,107,107,.10);
+  --orange: #f0a04b;         /* warnings, caution, gradual/careful changes */
+  --orange-dim: rgba(240,160,75,.10);
+  --purple: #a48df0;         /* secondary elements, categories, supporting info */
+  --purple-dim: rgba(164,141,240,.10);
+  --yellow: #efc94c;         /* attention, metrics, callouts */
+  --yellow-dim: rgba(239,201,76,.10);
+}
+
+/* ===== Light theme — toggled by adding .light-theme to <html>; persists in localStorage ===== */
+:root.light-theme {
+  /* Backgrounds — lightest to darkest */
+  --bg-base: #f7f9fc;            /* page background, nav background */
+  --bg-primary: #ffffff;         /* code block inner background */
+  --bg-surface: #eef2f8;         /* card backgrounds */
+  --bg-surface-raised: #dde4ef;  /* hover states on nav buttons */
+  --border: #ccd4e0;             /* card borders, table borders, nav border */
+  --border-bright: #aab5c6;      /* emphasized borders */
+
+  /* Text — darkest to dimmest */
+  --text-primary: #0b1120;       /* ~17:1 against --bg-base */
+  --text-secondary: #3d4a63;     /* ~8:1 against --bg-base */
+  --text-dim: #6b7894;           /* ~4.6:1 against --bg-base */
+
+  /* Semantic accent colors — darkened for AA contrast on light bg */
+  --blue: #2563eb;
+  --blue-dim: rgba(37,99,235,.10);
+  --cyan: #0891b2;
+  --cyan-dim: rgba(8,145,178,.10);
+  --green: #15803d;
+  --green-dim: rgba(21,128,61,.10);
+  --red: #c2362d;
+  --red-dim: rgba(194,54,45,.10);
+  --orange: #b8651b;
+  --orange-dim: rgba(184,101,27,.10);
+  --purple: #6d4ce6;
+  --purple-dim: rgba(109,76,230,.10);
+  --yellow: #a37908;
+  --yellow-dim: rgba(163,121,8,.10);
+}
+/* Chrome that hardcodes the dark base color needs a light override */
+:root.light-theme .nav { background: rgba(247,249,252,.92); }
+:root.light-theme body.notes-visible .slide.active .speaker-notes {
+  background: rgba(247,249,252,.94);
+}
+
+/* ===== Global Reset & Body ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  overflow: hidden;          /* one slide visible at a time, no page scroll */
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Typography Scale ===== */
+h1 { font-size: 3rem; font-weight: 800; line-height: 1.08; letter-spacing: -.035em; }
+h2 { font-size: 1.9rem; font-weight: 700; line-height: 1.18; letter-spacing: -.025em; margin-bottom: 6px; }
+h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 10px; }
+p, li { font-size: 1rem; line-height: 1.6; color: var(--text-secondary); }
+strong { color: var(--text-primary); font-weight: 600; }
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .85em;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--cyan);        /* inline code is always cyan */
+}
+
+/* ===== List Styling ===== */
+ul { list-style: none; padding: 0; }
+ul li { margin-bottom: 8px; padding-left: 18px; position: relative; }
+ul li::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 9px;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--blue);   /* default dot color; can override per-section */
+}
+
+/* ===== Utility Classes — color text semantically ===== */
+.accent { color: var(--cyan); }
+.blue   { color: var(--blue); }
+.green  { color: var(--green); }
+.red    { color: var(--red); }
+.orange { color: var(--orange); }
+.purple { color: var(--purple); }
+.yellow { color: var(--yellow); }
+.dim    { color: var(--text-dim); }
+
+/* ===== Recurring Visual Elements ===== */
+.eyebrow {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  margin-bottom: 6px;
+  /* color is set inline to match the section's accent color */
+}
+.divider {
+  width: 44px; height: 3px;
+  border-radius: 2px;
+  margin: 12px 0 22px;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+}
+.center .divider { margin: 12px auto 22px; } /* centered variant */
+.subtitle { font-size: 1.2rem; color: var(--text-secondary); font-weight: 300; }
+
+/* ===== Slide Engine ===== */
+.deck { position: relative; width: 100vw; height: 100vh; }
+
+.slide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  padding: 48px 64px 72px;          /* 72px bottom clears the nav bar */
+  opacity: 0; pointer-events: none;
+  transition: opacity .35s ease, transform .35s ease;
+  transform: translateY(8px);       /* subtle upward entrance */
+  overflow-y: auto;                 /* scroll instead of clip when content exceeds the viewport */
+}
+.slide.active {
+  opacity: 1; pointer-events: auto;
+  transform: translateY(0);
+}
+@media (max-height: 860px) {
+  .slide { justify-content: flex-start; }  /* top-align + scroll on short viewports instead of clipping both edges */
+}
+
+/* ===== Navigation ===== */
+.nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 36px;
+  background: rgba(6,9,15,.92);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--border);
+  z-index: 100;
+}
+.nav button {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 7px 20px;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: .82rem; font-weight: 500;
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+}
+.nav button:hover { background: var(--bg-surface-raised); border-color: var(--blue); }
+.nav button:disabled { opacity: .2; cursor: default; }
+.nav button:disabled:hover { background: var(--bg-surface); border-color: var(--border); }
+.nav .ctr {
+  font-size: .78rem; color: var(--text-dim);
+  font-weight: 500; font-variant-numeric: tabular-nums;
+}
+
+.pbar {
+  position: fixed; top: 0; left: 0; height: 2px;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+  transition: width .4s ease;
+  z-index: 100;
+}
+
+/* ===== Keyboard Help Overlay (?) ===== */
+.help-overlay {
+  position: fixed; inset: 0;
+  z-index: 1000;                          /* above .nav (z-index: 100) */
+  display: flex; align-items: center; justify-content: center;
+  opacity: 1;
+  transition: opacity .2s ease, visibility .2s;
+}
+.help-overlay[hidden] {
+  display: flex;                          /* override default hidden=display:none so we can fade */
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;                     /* removes the closed dialog from the a11y tree */
+}
+.help-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(6,9,15,.78);
+  backdrop-filter: blur(6px);
+}
+.help-card {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: 12px;
+  padding: 28px 34px;
+  min-width: 360px; max-width: 560px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+.help-card h3 { color: var(--text-primary); font-size: 1.2rem; }
+.help-card ul li { margin-bottom: 10px; }
+.help-card ul li::before { background: var(--cyan); }
+.help-close {
+  margin-top: 18px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: .8rem; font-weight: 500;
+  cursor: pointer;
+}
+.help-close:hover { border-color: var(--cyan); }
+
+@media (prefers-reduced-motion: reduce) {
+  .help-overlay { transition: none; }
+}
+
+/* ===== Layout Containers ===== */
+.content { width: 100%; max-width: 1100px; text-align: left; }
+.center  { text-align: center; }
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  width: 100%; max-width: 1100px;
+}
+.three-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 18px;
+  width: 100%; max-width: 1100px;
+}
+
+/* ===== Cards ===== */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px 26px;
+}
+.card h3 { color: var(--text-primary); }
+
+/* Semantic glow variants — border gets brighter, background gets a faint tint */
+.glow-red    { border-color: rgba(240,107,107,.22); background: linear-gradient(135deg, var(--bg-surface), rgba(240,107,107,.03)); }
+.glow-green  { border-color: rgba(61,214,140,.22);  background: linear-gradient(135deg, var(--bg-surface), rgba(61,214,140,.03)); }
+.glow-blue   { border-color: rgba(91,156,245,.22);  background: linear-gradient(135deg, var(--bg-surface), rgba(91,156,245,.03)); }
+.glow-cyan   { border-color: rgba(54,216,192,.22);  background: linear-gradient(135deg, var(--bg-surface), rgba(54,216,192,.03)); }
+.glow-orange { border-color: rgba(240,160,75,.22);  background: linear-gradient(135deg, var(--bg-surface), rgba(240,160,75,.03)); }
+.glow-purple { border-color: rgba(164,141,240,.22); background: linear-gradient(135deg, var(--bg-surface), rgba(164,141,240,.03)); }
+
+/* ===== Code Blocks ===== */
+.code-block {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .82rem;
+  background: var(--bg-primary);         /* darker than card surface */
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 22px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  overflow-x: auto;
+}
+
+/* ===== Callout Boxes ===== */
+/* Default — blue/cyan gradient, for key insights and takeaways */
+.callout {
+  background: linear-gradient(135deg, var(--blue-dim), var(--cyan-dim));
+  border: 1px solid rgba(91,156,245,.18);
+  border-radius: 10px;
+  padding: 16px 26px;
+}
+/* Danger — for warnings, risks, things that are broken */
+.callout-red {
+  background: linear-gradient(135deg, var(--red-dim), rgba(240,107,107,.05));
+  border-color: rgba(240,107,107,.18);
+}
+/* Positive — for confirmations, solutions, good news */
+.callout-green {
+  background: linear-gradient(135deg, var(--green-dim), rgba(61,214,140,.05));
+  border-color: rgba(61,214,140,.18);
+}
+
+/* ===== Flow Diagrams ===== */
+.flow { display: flex; align-items: center; justify-content: center; gap: 5px; flex-wrap: wrap; margin: 14px 0; }
+
+.fb {                               /* flow box */
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: .84rem; font-weight: 500;
+  white-space: nowrap;
+}
+
+.fa { color: var(--text-dim); font-size: 1.1rem; }  /* flow arrow — just a → character */
+
+/* Before/after variants */
+.fb.dead {                           /* something being removed */
+  border-color: rgba(240,107,107,.28);
+  background: rgba(240,107,107,.05);
+  text-decoration: line-through;
+  text-decoration-color: var(--red);
+}
+.fb.new {                            /* something being added */
+  border-color: rgba(61,214,140,.28);
+  background: rgba(61,214,140,.05);
+}
+
+/* ===== Inline Tags ===== */
+.tag {
+  display: inline-block;
+  font-size: .68rem; font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.tag-red    { background: rgba(240,107,107,.12); color: var(--red); }
+.tag-green  { background: rgba(61,214,140,.12);  color: var(--green); }
+.tag-blue   { background: rgba(91,156,245,.12);  color: var(--blue); }
+.tag-orange { background: rgba(240,160,75,.12);  color: var(--orange); }
+.tag-purple { background: rgba(164,141,240,.12); color: var(--purple); }
+.tag-cyan   { background: rgba(54,216,192,.12);  color: var(--cyan); }
+
+/* ===== Tables ===== */
+.tbl { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.tbl th {
+  text-align: left; padding: 9px 14px;
+  font-weight: 600; color: var(--text-dim);
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border);
+}
+.tbl td {
+  padding: 9px 14px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(30,45,74,.4);
+}
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr.kill-row { background: rgba(240,107,107,.04); }  /* highlight rows being removed */
+
+/* ===== Metric Callouts ===== */
+.metric { text-align: center; padding: 20px 16px; }
+.metric .num { font-size: 2.4rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; }
+.metric .lbl { font-size: .82rem; color: var(--text-dim); margin-top: 4px; }
+
+/* ===== Phased Step Rows ===== */
+.pr { display: flex; align-items: flex-start; margin-bottom: 14px; }
+.pb {                                /* phase badge — circle with number */
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  font-weight: 700; font-size: .9rem;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+.pr .pt { flex: 1; }                /* phase text container */
+.pr .pt p { margin-top: 3px; font-size: .92rem; }
+
+/* ===== Speaker Notes (N key) ===== */
+.speaker-notes { display: none; }
+
+body.notes-visible .slide.active .speaker-notes {
+  display: block;
+  position: fixed;
+  left: 0; right: 0;
+  bottom: 56px;                    /* sits just above the nav bar */
+  max-height: 28vh;
+  overflow-y: auto;
+  padding: 12px 36px;
+  background: rgba(6,9,15,.94);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .82rem;
+  line-height: 1.55;
+  color: var(--text-dim);          /* dimmed so it reads as presenter chrome */
+  z-index: 90;                     /* below nav (z-index: 100) */
+}
+
+@media print {
+  .speaker-notes,
+  body.notes-visible .slide.active .speaker-notes { display: none !important; }
+}
+
+/* ===== Title Slide ===== */
+.title-slide { text-align: center; }
+.logo {
+  font-size: .76rem; font-weight: 700;
+  letter-spacing: .18em; text-transform: uppercase;
+  color: var(--blue); margin-bottom: 24px;
+}
+/* Optional verdict banner — for strong thesis statements */
+.verdict-banner {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(240,107,107,.07), rgba(240,160,75,.07));
+  border: 1px solid rgba(240,107,107,.18);
+  border-radius: 8px;
+  padding: 10px 28px;
+  font-size: 1.05rem; font-weight: 600;
+  color: var(--red);
+  margin-top: 20px;
+}
+
+/* ===== Section Divider ===== */
+.section-slide { text-align: center; }
+.section-num {
+  font-size: 5rem; font-weight: 800;
+  letter-spacing: -.06em; line-height: 1;
+  margin-bottom: 12px;
+}
+
+/* ===== Print / PDF Export — one slide per page ===== */
+@media print {
+  @page { size: 1440px 900px; margin: 0; }                    /* match the design viewport, kill printer margins */
+  .nav, .pbar, .help-overlay { display: none !important; }    /* hide all chrome */
+  html, body { height: auto !important; overflow: visible !important; }
+  .deck { position: static; width: auto; height: auto; }
+  .slide {                                 /* reveal every slide, one per page */
+    position: relative; inset: auto;
+    opacity: 1 !important; transform: none !important; pointer-events: auto;
+    width: 100%; min-height: 100vh; box-sizing: border-box;
+    break-after: page; page-break-after: always;
+  }
+  .slide:last-child { break-after: auto; page-break-after: auto; }
+}
+</style>
+</head>
+<body>
+  <div class="pbar" id="pbar"></div>       <!-- progress bar, fixed top -->
+
+  <div class="deck" id="deck">
+
+    <!-- ===== SLIDE TYPE: Title Slide — first slide, and reuse the pattern for the closing summary ===== -->
+    <div class="slide title-slide active" data-slide="0">
+      <div class="logo">COMPANY / TEAM NAME</div>
+      <h1>Main Title<br><span class="accent">Highlighted Part</span></h1>
+      <div class="divider" style="margin:18px auto;"></div>
+      <p class="subtitle">One-line description of the deck</p>
+      <!-- Optional verdict/tagline banner: -->
+      <div class="verdict-banner">Key verdict or thesis statement</div>
+    </div>
+
+    <!-- ===== SLIDE TYPE: Section Divider — a pacing beat before each major topic shift ===== -->
+    <div class="slide section-slide" data-slide="1">
+      <p class="eyebrow" style="color:var(--green)">Section 1</p>
+      <div class="section-num green">Current State</div>
+      <p class="subtitle">One-line framing of what this section covers</p>
+    </div>
+
+    <!-- ===== SLIDE TYPE: Content Slide (standard) — eyebrow -> h2 -> divider -> body ===== -->
+    <!-- Also demonstrates: callout box, code block, and speaker notes -->
+    <div class="slide" data-slide="2">
+      <div class="content">
+        <p class="eyebrow" style="color:var(--blue)">Section 1 — Current State</p>
+        <h2>Slide Heading That States the Conclusion</h2>
+        <div class="divider"></div>
+        <p>Lead sentence that frames the evidence below. Inline <code>code</code> is always cyan.</p>
+        <!-- Callout box — .callout (blue/cyan) | .callout-red (danger) | .callout-green (positive) -->
+        <div class="callout callout-red" style="margin-top:16px;">
+          <p><strong class="red">The problem:</strong> state the single takeaway for this slide.</p>
+        </div>
+        <!-- Code block — manual syntax highlighting via color-class spans; keep to ~10 lines -->
+        <div class="code-block" style="margin-top:16px;">
+<span class="blue">SELECT</span> * <span class="blue">FROM</span> table
+<span class="blue">WHERE</span> id = <span class="accent">:value</span>
+<span class="dim">-- comment</span>
+        </div>
+      </div>
+      <!-- Speaker notes — press N to toggle; hidden by default and never printed -->
+      <div class="speaker-notes" hidden>
+        Talking points the audience never sees. Replace with real notes, citations, or numbers.
+      </div>
+    </div>
+
+    <!-- ===== Content Slide variant — flow diagram, table, tags, phased step rows ===== -->
+    <div class="slide" data-slide="3">
+      <div class="content">
+        <p class="eyebrow" style="color:var(--purple)">Section 1 — Architecture</p>
+        <h2>Use Boxes-and-Arrows for Any Process or Flow</h2>
+        <div class="divider"></div>
+        <!-- Flow diagram — color-code box borders per entity; .new = added, .dead = removed -->
+        <div class="flow">
+          <div class="fb" style="border-color:var(--blue)"><span class="blue">Service A</span><br><span class="dim" style="font-size:.7rem">role</span></div>
+          <span class="fa">→</span>
+          <div class="fb new"><span class="green">New Service</span></div>
+          <span class="fa">→</span>
+          <div class="fb dead"><span class="red">Dead Service</span></div>
+        </div>
+        <!-- Table — keep to ~8 rows; .kill-row highlights rows being removed -->
+        <table class="tbl" style="margin-top:14px;">
+          <thead><tr><th>Component</th><th>Owner</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Ingest</td><td>Producer</td><td><span class="tag tag-green">keep</span></td></tr>
+            <tr class="kill-row"><td>Polling worker</td><td>Platform</td><td><span class="tag tag-red">kill</span></td></tr>
+          </tbody>
+        </table>
+        <!-- Phased step rows — for migration plans / numbered sequences -->
+        <div class="pr" style="margin-top:18px;">
+          <span class="pb" style="background:var(--blue-dim);color:var(--blue)">1</span>
+          <div class="pt">
+            <strong>Phase Name</strong> <span class="tag tag-green">zero risk</span>
+            <p>Description of what happens in this phase.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE TYPE: Two-Column Comparison — before/after, problem/solution, option A vs B ===== -->
+    <div class="slide" data-slide="4">
+      <p class="eyebrow center" style="color:var(--orange)">Section 2 — Trade-offs</p>
+      <h2 style="text-align:center">Side-by-Side Beats Sequential Description</h2>
+      <div class="divider" style="margin:12px auto 22px;"></div>
+      <div class="two-col">
+        <div class="card glow-red">
+          <h3 class="red">Before / Problem / Option A</h3>
+          <p>Content...</p>
+        </div>
+        <div class="card glow-green">
+          <h3 class="green">After / Solution / Option B</h3>
+          <p>Content...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE TYPE: Three-Column Features — parallel concepts at equal weight; here, metric callouts ===== -->
+    <div class="slide" data-slide="5">
+      <p class="eyebrow center" style="color:var(--cyan)">Section 3 — Impact</p>
+      <h2 style="text-align:center">Metric Callouts for Concrete Numbers</h2>
+      <div class="divider" style="margin:12px auto 22px;"></div>
+      <!-- Every number here MUST appear in the source material — no invented figures. If there's no real number, use a text card instead. -->
+      <div class="three-col">
+        <div class="card"><div class="metric"><div class="num red">3</div><div class="lbl">Services eliminated</div></div></div>
+        <div class="card"><div class="metric"><div class="num orange">~120s</div><div class="lbl">Latency removed</div></div></div>
+        <div class="card"><div class="metric"><div class="num green">40%</div><div class="lbl">Cost reduction</div></div></div>
+      </div>
+    </div>
+
+  </div><!-- /.deck -->
+
+  <nav class="nav">                        <!-- navigation, fixed bottom -->
+    <button id="prevBtn" onclick="go(-1)">← Prev</button>
+    <span class="ctr" id="ctr">1 / 6</span>
+    <button id="themeBtn" type="button" aria-pressed="false" aria-label="Switch to light theme">☾</button>
+    <button id="nextBtn" onclick="go(1)">Next →</button>
+  </nav>
+
+  <div id="helpOverlay" class="help-overlay" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+    <div class="help-backdrop" onclick="toggleHelp()"></div>
+    <div class="help-card" role="document">
+      <h3 id="helpTitle">Keyboard & Touch Navigation</h3>
+      <div class="divider"></div>
+      <ul>
+        <li><strong>Arrow keys</strong> <span class="dim">— ← previous slide, → next slide</span></li>
+        <li><strong>Spacebar</strong> <span class="dim">— next slide</span></li>
+        <li><strong>Home / End</strong> <span class="dim">— jump to first or last slide</span></li>
+        <li><strong>N</strong> <span class="dim">— toggle speaker notes</span></li>
+        <li><strong>Swipe left / right</strong> <span class="dim">— navigate on touch devices</span></li>
+        <li><strong>?</strong> <span class="dim">— toggle this help overlay (Escape also dismisses)</span></li>
+      </ul>
+      <button class="help-close" onclick="toggleHelp()" aria-label="Close help overlay">Close</button>
+    </div>
+  </div>
+
+  <script>
+  // ===== Navigation =====
+  let cur = 0;
+  const ss = document.querySelectorAll('.slide');
+  const tot = ss.length;
+  const ctr = document.getElementById('ctr');
+  const bar = document.getElementById('pbar');
+  const pb = document.getElementById('prevBtn');
+  const nb = document.getElementById('nextBtn');
+
+  function show(i) {
+    ss.forEach(s => s.classList.remove('active'));
+    ss[i].classList.add('active');
+    if (ctr) ctr.textContent = `${i + 1} / ${tot}`;
+    if (bar) bar.style.width = `${((i + 1) / tot) * 100}%`;
+    if (pb) pb.disabled = i === 0;
+    if (nb) nb.disabled = i === tot - 1;
+  }
+
+  function go(d) {
+    const n = cur + d;
+    if (n >= 0 && n < tot) { cur = n; show(cur); }
+  }
+
+  // ===== Keyboard help overlay (?) — null-guarded so the chrome is optional =====
+  const helpOverlay = document.getElementById('helpOverlay');
+
+  function toggleHelp(force) {
+    if (!helpOverlay) return;
+    const willShow = typeof force === 'boolean' ? force : helpOverlay.hasAttribute('hidden');
+    if (willShow) helpOverlay.removeAttribute('hidden');
+    else helpOverlay.setAttribute('hidden', '');
+  }
+
+  // ===== Light / dark theme toggle — null-guarded; persists in localStorage =====
+  const themeBtn = document.getElementById('themeBtn');
+  const THEME_KEY = 'slidedeck.theme';
+
+  function applyTheme(theme) {
+    const isLight = theme === 'light';
+    document.documentElement.classList.toggle('light-theme', isLight);
+    if (themeBtn) {
+      themeBtn.setAttribute('aria-pressed', String(isLight));
+      themeBtn.textContent = isLight ? '☀' : '☾';
+      themeBtn.setAttribute('aria-label', isLight ? 'Switch to dark theme' : 'Switch to light theme');
+    }
+  }
+
+  function loadTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch (_) {}
+    applyTheme(saved === 'light' ? 'light' : 'dark');
+  }
+
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      const next = document.documentElement.classList.contains('light-theme') ? 'dark' : 'light';
+      applyTheme(next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+    });
+  }
+
+  // ===== Single keydown listener: help + navigation + speaker notes =====
+  document.addEventListener('keydown', e => {
+    if (e.key === '?') { e.preventDefault(); toggleHelp(); return; }
+    if (e.key === 'Escape' && helpOverlay && !helpOverlay.hasAttribute('hidden')) { e.preventDefault(); toggleHelp(false); return; }
+    if (helpOverlay && !helpOverlay.hasAttribute('hidden')) return;   // suppress nav + notes while overlay is open
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+    if (e.key === 'Home') { cur = 0; show(cur); }
+    if (e.key === 'End') { cur = tot - 1; show(cur); }
+    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); document.body.classList.toggle('notes-visible'); }
+  });
+
+  // ===== Touch swipe =====
+  let tx = 0;
+  document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; });
+  document.addEventListener('touchend', e => {
+    const d = e.changedTouches[0].clientX - tx;
+    if (Math.abs(d) > 60) go(d < 0 ? 1 : -1);
+  });
+
+  // ===== Init — load theme before first paint (no flash), then show first slide =====
+  loadTheme();
+  show(0);
+  </script>
+</body>
+</html>

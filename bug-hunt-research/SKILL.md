@@ -2,6 +2,7 @@
 name: bug-hunt-research
 description: "Autonomous prompt optimization loop for the bug-hunt skill. Iteratively modifies bug-hunt prompts (hunter, skeptic, referee), runs them against benchmark codebases with planted bugs and traps, scores with a deterministic evaluation function, and keeps or reverts changes based on improvement. Modeled on the autoresearch pattern. Invoke with /bug-hunt-research to start optimizing."
 argument-hint: "[tag] [--resume] [--ideas 'hypothesis1, hypothesis2']"
+disable-model-invocation: true
 ---
 
 # Bug-Hunt Research — Autonomous Prompt Optimization Loop
@@ -10,9 +11,11 @@ Run an autonomous, indefinite experiment loop that modifies the bug-hunt skill's
 
 ## Target
 
-The skill files to optimize live in:
+Everything lives in this repo checkout — run the loop **here**, not in `~/.claude/skills` (that copy is not a git repo, so the commit/revert engine below cannot run there). `<repo>` is your local clone of this repo. After a session, `./install.sh ~/.claude/skills` publishes the improved prompts to the live skill.
+
+The skill files to optimize:
 ```
-~/.claude/skills/bug-hunt/
+<repo>/bug-hunt/
 ├── SKILL.md                    # orchestration (modify sparingly)
 └── prompts/
     ├── hunter.md               # primary target for optimization
@@ -20,18 +23,18 @@ The skill files to optimize live in:
     └── referee.md              # secondary target
 ```
 
-The benchmark suite and evaluation harness live in:
+The benchmark suite and evaluation harness:
 ```
-~/.claude/skills/bug-hunt-research/
+<repo>/bug-hunt-research/
 ├── benchmarks/
 │   ├── easy/vuln_api_server.py        # 7 planted bugs (SQL injection, MD5, path traversal, etc.)
 │   ├── medium/data_pipeline.py        # 4 planted bugs (race conditions, off-by-one, silent exceptions)
 │   ├── hard/auth_session.py           # 5 planted bugs (token truncation, predictable RNG, timing attacks)
-│   ├── traps/safe_but_suspicious.py   # 5 false-positive traps (safe getattr, intentional sleep, etc.)
-│   └── manifest.json                  # ground truth for all planted bugs and traps
+│   └── traps/safe_but_suspicious.py   # 5 false-positive traps (safe getattr, intentional sleep, etc.)
+├── manifest.json                      # ground truth — kept OUT of benchmarks/ so hunters never read the answer key
 ├── evaluate.py                        # scoring script
-├── results.tsv                        # experiment log (created during setup)
-└── insights.md                        # compressed memory (created during setup)
+├── results.tsv                        # experiment log (tracked)
+└── insights.md                        # compressed memory (tracked)
 ```
 
 If the user provided arguments: $ARGUMENTS
@@ -49,8 +52,11 @@ If no tag is provided, generate one from today's date.
 
 ### 1.1 Create a branch
 
+First confirm the working tree is clean — the loop reverts experiments with git, which must not touch unrelated uncommitted work:
+
 ```bash
-cd ~/.claude/agent/skills
+cd <repo>            # your local clone of this repo
+git status --porcelain --untracked-files=no   # must be empty; commit or stash first if not
 git checkout -b bug-hunt-research/<tag>
 ```
 
@@ -63,20 +69,18 @@ Read completely — do not skim:
 1. **Bug-hunt prompts**: `bug-hunt/prompts/hunter.md`, `bug-hunt/prompts/skeptic.md`, `bug-hunt/prompts/referee.md`
 2. **Bug-hunt orchestration**: `bug-hunt/SKILL.md`
 3. **Benchmark files**: All 4 Python files in `bug-hunt-research/benchmarks/`
-4. **Manifest**: `bug-hunt-research/benchmarks/manifest.json` — understand every planted bug and trap
+4. **Manifest**: `bug-hunt-research/manifest.json` — understand every planted bug and trap
 5. **Evaluation script**: `bug-hunt-research/evaluate.py` — understand how scoring works
 
 ### 1.3 Initialize tracking
 
-Create `results.tsv` in `~/.claude/skills/bug-hunt-research/`:
+`results.tsv` and `insights.md` live in `bug-hunt-research/` and are **tracked** — they are cross-session memory. Create them only if missing; otherwise append, never overwrite.
+
+`results.tsv` header (tab-separated):
 
 ```
-commit	composite	f1	recall	precision	trap_resistance	description
+commit	composite	f1	recall	precision	severity_accuracy	trap_resistance	description
 ```
-
-Tab-separated. Stays untracked.
-
-Create `insights.md` with initial state.
 
 ### 1.4 Run baseline
 
@@ -84,9 +88,9 @@ Run the current unmodified bug-hunt prompts against all benchmarks and score the
 
 **How to run a single evaluation:**
 
-1. Use the `subagent` tool to run the 3-agent bug-hunt pipeline (hunter → skeptic → referee) against the benchmark directory `~/.claude/skills/bug-hunt-research/benchmarks/`
+1. Dispatch the 3-agent bug-hunt pipeline (hunter → skeptic → referee) as isolated Task subagents against the benchmark directory `bug-hunt-research/benchmarks/`. Never give a hunter the manifest — it is the answer key.
 2. Capture the referee's final output to a temp file
-3. Run: `python ~/.claude/skills/bug-hunt-research/evaluate.py <referee_output_file> ~/.claude/skills/bug-hunt-research/benchmarks/manifest.json`
+3. Run: `python3 bug-hunt-research/evaluate.py <referee_output_file> bug-hunt-research/manifest.json`
 4. Record the composite score and component scores
 
 ### 1.5 Begin experiments
@@ -100,33 +104,37 @@ Once baseline is recorded, immediately begin the experiment loop. **Do not wait 
 ```
 LOOP FOREVER:
     1. Read insights.md, check recent results
-    2. Hypothesize a prompt change
-    3. Edit the prompt file(s) in bug-hunt/prompts/
-    4. git commit -am "experiment: <description>"
-    5. Run full bug-hunt against benchmarks
-    6. Score with evaluate.py
-    7. Log to results.tsv
-    8. If composite improved → keep commit (advance branch)
-    9. If not improved → git reset --hard HEAD~1 (revert)
-    10. Update insights.md every ~3 experiments
-    11. GOTO 1
+    2. Hypothesize ONE prompt change; edit the file(s) in bug-hunt/prompts/
+    3. Run the full bug-hunt pipeline against the benchmarks; score with evaluate.py
+    4. Append the result row to results.tsv
+    5. Decide (see Phase 3):
+         keep    → git add bug-hunt/ bug-hunt-research/results.tsv bug-hunt-research/insights.md
+                   git commit -m "experiment: <desc> (keep, composite X)"
+         discard → git checkout -- bug-hunt/prompts/          # revert the prompt edit ONLY
+                   git add bug-hunt-research/results.tsv
+                   git commit -m "log: <desc> (discard, composite X)"
+    6. Update insights.md every ~3 experiments
+    7. GOTO 1
+
+Never use `git commit -am` or `git reset --hard` — both reach beyond bug-hunt/ and
+can destroy the results log or unrelated work.
 ```
 
 ### Running the Bug-Hunt Pipeline
 
-For each experiment, you need to run the full 3-agent pipeline. Use the `subagent` tool:
+For each experiment, run the full 3-agent pipeline as isolated Task subagents:
 
-**Step A — Hunter**: Invoke a worker subagent with the current `hunter.md` prompt content plus the benchmark directory path. The hunter must use tools to read the actual benchmark files.
+**Step A — Hunter**: Launch a Task subagent (subagent_type: general-purpose) with the current `hunter.md` prompt content plus the benchmark directory path (`bug-hunt-research/benchmarks/`). The hunter must read the actual benchmark files — never hand it the manifest.
 
-**Step B — Skeptic**: Invoke a new worker subagent with the current `skeptic.md` prompt content plus the hunter's structured findings.
+**Step B — Skeptic**: Launch a new Task subagent with the current `skeptic.md` prompt content plus the hunter's structured findings.
 
-**Step C — Referee**: Invoke a new worker subagent with the current `referee.md` prompt content plus both the hunter's and skeptic's reports.
+**Step C — Referee**: Launch a new Task subagent with the current `referee.md` prompt content plus both the hunter's and skeptic's reports.
 
 **Step D — Score**: Save the referee output to a temp file, run `evaluate.py`, parse the JSON scores.
 
 ### Key Rules
 
-- **Redirect subagent output**: Capture the full text output from each subagent call.
+- **Capture subagent output**: Save the full text output from each Task subagent call.
 - **One change at a time**: Don't modify all 3 prompts simultaneously. Change hunter OR skeptic OR referee in a single experiment.
 - **Crash handling**: If a subagent fails or produces unparseable output, log as crash, revert, move on.
 - **Each experiment takes ~5-10 minutes**: Budget accordingly.
@@ -137,13 +145,15 @@ For each experiment, you need to run the full 3-agent pipeline. Use the `subagen
 
 ### Keep vs Discard
 
+Run-to-run noise is ~0.06 (one bug found/missed = 1/16 ≈ 0.0625), so a single run cannot resolve small deltas.
+
 | Condition | Action | Status |
 |-----------|--------|--------|
-| Composite improved by ≥0.01 | Keep commit, advance branch | `keep` |
-| Composite improved by <0.01 but prompt is simpler | Keep — simplification win | `keep` |
-| Composite improved by <0.01, adds complexity | Discard — not worth it | `discard` |
-| Composite equal or worse | Revert commit | `discard` |
-| Run crashed or output unparseable | Fix trivial issues or revert | `crash` |
+| Composite improved by ≥0.07 on one run | Keep, advance branch | `keep` |
+| Composite delta <0.07 (either sign) | Re-run once; keep only if the second run also meets or beats the parent's score (record both rows) | `keep`/`discard` |
+| Composite clearly worse (≥0.07 drop) | Revert the prompt edit | `discard` |
+| Prompt strictly simpler at equal-or-better score | Keep — simplification win | `keep` |
+| Run crashed or output unparseable | Fix ONE trivial issue and re-run once, else revert | `crash` |
 
 ### The Simplicity Criterion
 
@@ -183,7 +193,7 @@ Rotate across these categories. **If your last 3 experiments targeted the same p
 
 ### Plateau Detection
 
-If **5 consecutive experiments** show no improvement (composite delta < 0.01):
+If **5 consecutive experiments** show no improvement (composite delta < 0.07, i.e. within noise):
 - Stop tweaking the same prompt — switch targets
 - Try structural changes (e.g., add a 4th agent, change information flow)
 - Combine previous near-improvements
@@ -195,13 +205,14 @@ If **5 consecutive experiments** show no improvement (composite delta < 0.01):
 
 ### results.tsv
 
-Tab-separated, 7 columns. Append after every experiment:
+Tab-separated, 8 columns. Append after every experiment:
 
 ```
-commit	composite	f1	recall	precision	trap_resistance	description
-a1b2c3d	0.000000	0.0000	0.0000	0.0000	0.0000	baseline
-b2c3d4e	0.125000	0.5000	0.4375	0.5833	0.8000	add FP penalty to hunter
+commit	composite	f1	recall	precision	severity_accuracy	trap_resistance	description
+a1b2c3d	0.000000	0.0000	0.0000	0.0000	0.0000	0.0000	baseline
 ```
+
+`composite = f1 × (0.5 + 0.5·severity_accuracy) × trap_resistance` (formula v2, 2026-07 — severity is a 0.5–1.0 multiplier so it can't zero out real detection). Older rows use a 7-column schema and `f1 × severity_accuracy × trap_resistance`; their composites are not comparable, so re-baseline before comparing across the change.
 
 ### insights.md
 
@@ -218,14 +229,21 @@ Contents:
 
 ---
 
+## Phase 6: Publish & caveats
+
+- **Deploy after a session** (or after each solid `keep`): run `./install.sh ~/.claude/skills` from `<repo>` to copy the improved prompts into the live skill. Edits here are inert until you do.
+- **Benchmark saturation**: only 16 planted bugs across 4 files. A strong model finds real bugs the manifest doesn't list; `manifest.json` carries a `neutral` list so those don't count against precision — extend it as you adjudicate new real extras. Consider a held-out `benchmarks/holdout/` set (its own manifest, ideally a second language) scored only at session end and never used for keep/discard, so gains reflect generalization, not memorization.
+
+---
+
 ## Constraints — Hard Rules
 
-1. **Only modify files in `~/.claude/skills/bug-hunt/`**. Never modify benchmark files or manifest.json.
-2. **Never modify `evaluate.py`**. The scoring function is sacred ground truth.
-3. **The manifest is ground truth**. If the bug-hunt doesn't find a planted bug, that's a bug-hunt problem, not a manifest problem.
+1. **Only modify the prompts in `bug-hunt/`**. Never modify benchmark files, `manifest.json`, or `evaluate.py`.
+2. **The scoring function is ground truth**. If the bug-hunt doesn't find a planted bug, that's a bug-hunt problem, not a manifest problem.
+3. **Prompt edits must describe general bug classes** — never reference a specific planted bug, its file, its line numbers, or its manifest severity. Encoding the answer key into a prompt inflates the score without improving real bug-hunting.
 4. **One variable at a time**. Each experiment changes ONE thing about ONE prompt.
-5. **Never stop to ask**. The human may be asleep. Run autonomously until interrupted.
-6. **Never commit results.tsv or insights.md**. They stay untracked.
+5. **Never stop to ask** — the human may be asleep — UNLESS the environment is broken (benchmarks or `evaluate.py` missing, git unavailable): then write a note to insights.md and stop.
+6. **results.tsv and insights.md are tracked** — commit them with each experiment (Phase 2). Never `git commit -am` or `git reset --hard`; both reach beyond `bug-hunt/`.
 
 ---
 

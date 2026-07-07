@@ -1,12 +1,12 @@
 ---
 name: bug-hunt
-description: "Run adversarial bug hunting on your codebase. Uses 3 isolated subagents (Hunter, Skeptic, Referee) to find and verify real bugs with high fidelity. Invoke when the user asks for a bug hunt, security audit, or adversarial code review."
+description: "Run adversarial bug hunting on your codebase. Uses 3 isolated subagents (Hunter, Skeptic, Referee) to find and verify real bugs with high fidelity. Invoke when the user asks for a bug hunt, security audit (line-level bugs and vulnerabilities), or adversarial code review — for attack-path or threat-model assessment use red-team."
 argument-hint: "[path/to/scan] [--diff] [--commit sha] [--pr number]"
 ---
 
 # Bug Hunt - Adversarial Bug Finding
 
-Run a 3-agent adversarial bug hunt on your codebase. Each agent runs in isolation via pi's `subagent` tool.
+Run a 3-agent adversarial bug hunt on your codebase. Each agent runs in isolation as isolated Task tool subagents.
 
 ## Target
 
@@ -17,7 +17,7 @@ Supported target formats:
 - **File path:** Scan a single file
 - **`--diff`:** Scan only files changed vs the default branch
   ```bash
-  git diff --name-only $(git merge-base HEAD main)..HEAD
+  base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||'); [ -n "$base" ] || base=$(git rev-parse --verify -q main >/dev/null && echo main || echo master); git diff --name-only "$(git merge-base HEAD "$base")"..HEAD
   ```
 - **`--commit [sha]`:** Scan only files changed in a specific commit
   ```bash
@@ -51,7 +51,11 @@ Read these files using the skill directory variable:
 Search for a `.bug-hunt-profile.md` file by walking up from the scan target directory:
 
 ```bash
-dir="[target]"
+if [ -d "[target]" ]; then
+  dir="$(cd "[target]" && pwd)"
+else
+  dir="$(cd "$(dirname "[target]")" && pwd)"
+fi
 while [ "$dir" != "/" ]; do
   if [ -f "$dir/.bug-hunt-profile.md" ]; then
     echo "Found profile: $dir/.bug-hunt-profile.md"
@@ -86,15 +90,14 @@ _Rationale:_ A `--diff` with no changes, an empty directory, or a filter that ex
 find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" \
   -o -name "*.go" -o -name "*.rs" -o -name "*.rb" -o -name "*.java" \
   -o -name "*.swift" -o -name "*.kt" -o -name "*.c" -o -name "*.cpp" \
-  -o -name "*.h" \) | grep -v node_modules | grep -v vendor | \
-  grep -v dist | grep -v __pycache__ | grep -v '.test.' | \
-  grep -v '.spec.' | wc -l
+  -o -name "*.h" \) | grep -v '/node_modules/' | grep -v '/vendor/' | \
+  grep -v '/dist/' | grep -v '/__pycache__/' | grep -v '\.test\.' | \
+  grep -v '\.spec\.' | wc -l
 ```
 
-- **If > 50 source files:** Run multiple Hunter agents in parallel using `subagent` parallel mode, each assigned a different directory/module. Merge their findings before passing to the Skeptic.
-- **If > 150 source files:** Additionally prioritize — run a quick recon agent first to identify the highest-risk modules (auth, data access, API handlers, config), then assign Hunters only to those modules.
-- **If > 200 source files:** Invoke a recon agent first to identify the highest-risk modules (auth, data access, API handlers, config, payment/permissions, parsing), then dispatch parallel Hunters scoped to those modules only. Do not attempt to scan the whole tree.
-  _Rationale:_ Token and time budget for a single Hunter run scales with file count. Beyond ~200 files the recon-then-targeted-hunters pattern produces higher-fidelity findings than a single broad scan, and avoids context exhaustion on the Hunter.
+- **If > 50 source files:** Run multiple Hunter agents in parallel by issuing multiple Task calls in a single message, each assigned a different directory/module; merge findings before the Skeptic.
+- **If > 150 source files:** Run a recon agent first to identify the highest-risk modules (auth, data access, API handlers, config, payment/permissions, parsing), then dispatch parallel Hunters scoped to those modules only — do not scan the whole tree.
+  _Rationale:_ Token and time budget for a single Hunter run scales with file count. Beyond ~150 files the recon-then-targeted-hunters pattern produces higher-fidelity findings than a single broad scan, and avoids context exhaustion on the Hunter.
 
 **Detect the project stack:**
 
@@ -108,8 +111,7 @@ Append the relevant framework-specific checklist to the Hunter's task (see the l
 
 ### Step 2: Run the Hunter Agent
 
-Use the `subagent` tool in single mode (or parallel mode for large codebases):
-- agent: `worker` (or any general-purpose agent available)
+Launch a new Task tool subagent (subagent_type: general-purpose):
 - task: Include the hunter prompt text AND the scan target path AND the detected stack-specific checklist. The Hunter must use tools (Read, Bash with find/grep) to examine actual code.
 
 **Parallel-hunter BUG-ID namespacing:** When running multiple Hunters in parallel (per the Step 1.5 thresholds), assign each Hunter a distinct BUG-ID prefix so findings remain unique across the merge. The assignment scheme is:
@@ -132,8 +134,7 @@ If the Hunter reported TOTAL FINDINGS: 0, skip Steps 3-4 and go directly to Step
 
 ### Step 3: Run the Skeptic Agent
 
-Use the `subagent` tool in single mode with a NEW agent invocation:
-- agent: `worker`
+Launch a new Task tool subagent (subagent_type: general-purpose):
 - task: Include the skeptic prompt text AND the Hunter's structured findings (content between the `===HUNTER_FINDINGS_START===` and `===HUNTER_FINDINGS_END===` delimiters — BUG-IDs, files, lines, claims, evidence, severity, points). Do NOT include narrative or methodology text — only the structured findings.
 
 The Skeptic must independently read the code to verify each claim.
@@ -142,8 +143,7 @@ Extract the content between `===SKEPTIC_REPORT_START===` and `===SKEPTIC_REPORT_
 
 ### Step 4: Run the Referee Agent
 
-Use the `subagent` tool in single mode with a NEW agent invocation:
-- agent: `worker`
+Launch a new Task tool subagent (subagent_type: general-purpose):
 - task: Include the referee prompt text AND both:
   - The Hunter's full findings (between `===HUNTER_FINDINGS_START===` / `===HUNTER_FINDINGS_END===`)
   - The Skeptic's full report (between `===SKEPTIC_REPORT_START===` / `===SKEPTIC_REPORT_END===`)
@@ -152,7 +152,7 @@ The Referee must independently read the code to make final judgments.
 
 ### Step 5: Present the Final Report
 
-Display the Referee's final verified bug report to the user. The report must use the detailed format for Critical and Medium bugs — each bug gets its own section with **What happens**, **Real-world impact**, and **Risk if unfixed**. Low-severity bugs can use a compact table.
+Display the Referee's final verified bug report to the user. The report must use the detailed format for Critical and Medium bugs — each bug gets its own section with **What happens**, **Real-world impact**, and **Risk if unfixed**. Low-severity bugs can use a compact table. The Referee's report contains detailed structured entries for ALL severities (its required output format); when presenting to the user, condense the confirmed Low bugs into the compact table yourself.
 
 Include:
 1. Summary stats

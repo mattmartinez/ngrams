@@ -1,12 +1,12 @@
 ---
 name: red-team
-description: "Run an adversarial red-team assessment on your own codebase. Uses 3 isolated subagents (Attacker, Blue Team, Arbiter) to enumerate attack surface, construct realistic attack paths, and verify which are actually exploitable. Invoke when the user asks for a red-team, threat model, attack-surface review, or adversarial security assessment of a project they own or are authorized to test."
+description: "Run an adversarial red-team assessment on your own codebase. Uses 3 isolated subagents (Attacker, Blue Team, Arbiter) to enumerate attack surface, construct realistic attack paths, and verify which are actually exploitable. Invoke when the user asks for a red-team, threat model, attack-surface review, or adversarial security assessment of a project they own or are authorized to test — for line-level bug or vulnerability hunting use bug-hunt."
 argument-hint: "[path/to/assess] [--diff] [--commit sha] [--pr number]"
 ---
 
 # Red Team — Adversarial Attack-Path Assessment
 
-Run a 3-agent adversarial red-team assessment on a codebase **you own or are explicitly authorized to test**. Each agent runs in isolation via pi's `subagent` tool.
+Run a 3-agent adversarial red-team assessment on a codebase **you own or are explicitly authorized to test**. Each agent runs as an isolated subagent (in Claude Code, the Task tool with a general-purpose agent).
 
 Where a bug hunt asks *"is this code correct?"*, a red team asks *"how would an adversary abuse this to reach something they shouldn't?"* The unit of work is not a defect on a line — it is an **attack path**: a precondition, a sequence of steps a chosen attacker persona can actually perform, and the asset it compromises. Isolated weaknesses matter only insofar as they form, or chain into, a reachable path to an asset.
 
@@ -27,7 +27,7 @@ Supported target formats:
 - **File path:** Assess a single file
 - **`--diff`:** Assess only files changed vs the default branch
   ```bash
-  git diff --name-only $(git merge-base HEAD main)..HEAD
+  base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#origin/##'); git diff --name-only $(git merge-base HEAD "${base:-main}")..HEAD
   ```
 - **`--commit [sha]`:** Assess only files changed in a specific commit
   ```bash
@@ -61,13 +61,19 @@ Read these files using the skill directory variable:
 Search for a `.red-team-profile.md` file by walking up from the assessment target directory:
 
 ```bash
-dir="[target]"
+# For a path target, start from its absolute location; for --diff/--commit/--pr
+# (which are flags, not paths) start the walk from the repo root, else cwd.
+if [ -e "[target]" ]; then
+  dir="$(cd "[target]" 2>/dev/null && pwd || cd "$(dirname "[target]")" 2>/dev/null && pwd || echo /)"
+else
+  dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+fi
 while [ "$dir" != "/" ]; do
   if [ -f "$dir/.red-team-profile.md" ]; then
     echo "Found profile: $dir/.red-team-profile.md"
     break
   fi
-  dir="$(dirname "$dir")"
+  prev="$dir"; dir="$(dirname "$dir")"; [ "$dir" = "$prev" ] && break
 done
 ```
 
@@ -103,7 +109,9 @@ find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" \
   grep -v '.test.' | grep -v '.spec.' | wc -l
 ```
 
-- **If > 50 files:** Run multiple Attacker agents in parallel using `subagent` parallel mode, each assigned a different **trust zone or entry-point class** (e.g., one for the public API surface, one for auth/session, one for data access, one for infra/CI/config). Merge their attack paths before passing to the Blue Team.
+In `--diff`/`--commit`/`--pr` modes, skip the `find` — the file count is the length of the resolved changed-file list; pipe that list through the same exclusion greps, then `wc -l`.
+
+- **If > 50 files:** Run multiple Attacker agents in parallel by dispatching multiple Task calls in parallel, each assigned a different **trust zone or entry-point class** (e.g., one for the public API surface, one for auth/session, one for data access, one for infra/CI/config). Merge their attack paths before passing to the Blue Team.
 - **If > 150 files:** Run a quick recon agent first to map entry points and trust boundaries, then assign Attackers only to the highest-value zones (anything reachable by an unauthenticated or low-privilege persona, and anything adjacent to a crown jewel).
 - **If > 200 files:** Always recon-first. Map external input sources → sensitive sinks, identify which modules sit on a trust boundary, and dispatch parallel Attackers scoped to those modules only. Do not attempt to assess the whole tree in one pass.
   _Rationale:_ Attack surface is concentrated at trust boundaries. A targeted assessment of boundary code produces higher-fidelity attack paths than a uniform sweep, and avoids context exhaustion.
@@ -117,14 +125,15 @@ ls [target]/package.json [target]/tsconfig.json [target]/Cargo.toml \
    [target]/Dockerfile [target]/*.tf [target]/openapi.* 2>/dev/null
 ```
 
+In `--diff`/`--commit`/`--pr` modes `[target]` is a flag, not a directory — run this `ls` against the repo root (`git rev-parse --show-toplevel`), not the changed files, since project shape is a property of the repo rather than the diff.
+
 Determine the **project shape** — this decides which attack surfaces dominate:
 network service / web app, CLI or desktop tool, library / SDK, long-running daemon, data pipeline / batch job, infrastructure-as-code. Append the relevant shape-specific surface checklist to the Attacker's task (see `attacker.md`). A project can have more than one shape (e.g., a service that also ships a CLI) — include all that apply.
 
 ### Step 2: Run the Attacker Agent
 
-Use the `subagent` tool in single mode (or parallel mode for large codebases):
-- agent: `worker` (or any general-purpose agent available)
-- task: Include the attacker prompt text AND the assessment target path AND the detected project shape(s) AND any profile crown jewels/personas. The Attacker must use tools (Read, Bash with find/grep) to examine actual code — it may not speculate about files it hasn't read.
+Dispatch a new isolated Task subagent (subagent_type: general-purpose) — or multiple parallel Task calls for large codebases:
+- task: Include the attacker prompt text AND the assessment target path AND the detected project shape(s) AND any profile crown jewels/personas and severity overrides. The Attacker must use tools (Read, Bash with find/grep) to examine actual code — it may not speculate about files it hasn't read.
 
 **Parallel-attacker ATTACK-ID namespacing:** When running multiple Attackers in parallel (per the Step 1.5 thresholds), assign each a distinct ATTACK-ID prefix so paths remain unique across the merge:
 
@@ -144,8 +153,7 @@ If the Attacker reported TOTAL ATTACK PATHS: 0, skip Steps 3–4 and go directly
 
 ### Step 3: Run the Blue Team Agent
 
-Use the `subagent` tool in single mode with a NEW agent invocation:
-- agent: `worker`
+Dispatch a new isolated Task subagent (subagent_type: general-purpose):
 - task: Include the blue-team prompt text, any profile-declared deployed controls, AND the Attacker's structured findings (content between the `===ATTACKER_FINDINGS_START===` / `===ATTACKER_FINDINGS_END===` delimiters). Do NOT include narrative or methodology text — only the structured attack paths.
 
 The Blue Team is the defender. It must independently read the code and rule each path **DEFENDED** or **EXPLOITABLE**: are the preconditions satisfiable by the named persona? Does an existing control (auth check, validation, sandbox, network boundary, rate limit) stop a link in the chain? Is the asset actually reachable?
@@ -154,9 +162,8 @@ Extract the content between `===BLUE_TEAM_REPORT_START===` and `===BLUE_TEAM_REP
 
 ### Step 4: Run the Arbiter Agent
 
-Use the `subagent` tool in single mode with a NEW agent invocation:
-- agent: `worker`
-- task: Include the arbiter prompt text AND both:
+Dispatch a new isolated Task subagent (subagent_type: general-purpose):
+- task: Include the arbiter prompt text AND any profile-declared severity overrides AND both:
   - The Attacker's full findings (between `===ATTACKER_FINDINGS_START===` / `===ATTACKER_FINDINGS_END===`)
   - The Blue Team's full report (between `===BLUE_TEAM_REPORT_START===` / `===BLUE_TEAM_REPORT_END===`)
 

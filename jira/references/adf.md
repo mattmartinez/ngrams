@@ -85,11 +85,11 @@ Write the ADF object to a temp file, then pass the path:
 
 ```bash
 node -e "
-const {adf, heading, paragraph, text} = require('./scripts/jira-api.js');
+const {adf, heading, paragraph, text} = require(process.env.HOME + '/.claude/skills/jira/scripts/jira-api.js');
 const d = adf([heading('Summary'), paragraph(text('...'))]);
 require('fs').writeFileSync('/tmp/desc.json', JSON.stringify(d));
 "
-node scripts/jira-api.js create --description-file /tmp/desc.json ...
+node ~/.claude/skills/jira/scripts/jira-api.js create --description-file /tmp/desc.json ...
 ```
 
 The create workflow handles this automatically.

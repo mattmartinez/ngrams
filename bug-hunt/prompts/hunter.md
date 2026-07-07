@@ -12,7 +12,7 @@ Before reading any source files:
 
 2. **Map the file tree (exclude noise):**
    ```bash
-   find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" -o -name "*.go" -o -name "*.rs" -o -name "*.rb" -o -name "*.java" -o -name "*.swift" -o -name "*.kt" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" \) | grep -v node_modules | grep -v vendor | grep -v dist | grep -v __pycache__ | grep -v '.test.' | grep -v '.spec.' | sort
+   find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" -o -name "*.go" -o -name "*.rs" -o -name "*.rb" -o -name "*.java" -o -name "*.swift" -o -name "*.kt" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" \) | grep -v '/node_modules/' | grep -v '/vendor/' | grep -v '/dist/' | grep -v '/__pycache__/' | grep -v '\.test\.' | grep -v '\.spec\.' | sort
    ```
 
 3. **Identify high-risk files first.** Prioritize:
@@ -45,6 +45,16 @@ Do NOT speculate about files you haven't read. If you haven't read the code, you
 ## Systematic bug checklist
 
 Scan every file against ALL of these categories:
+
+### ⚠️ Highest-yield async & stateful patterns (check these HARDEST — they hide in idiomatic-looking code)
+- **Guard staleness across an `await`:** after EVERY `await`, re-verify any cancellation flag / lock / generation / freshness value read BEFORE it — a value valid pre-await can be stale post-await (TOCTOU). A pre-await guard is necessary but NOT sufficient.
+- **Closure capturing a shared/loop binding** used inside a deferred callback (`setTimeout`, `.then`, an event handler): if the callback runs after the loop, every invocation reads the LAST value. Look for a `let`/`var` declared outside the loop but referenced in a closure.
+- **`Promise.all` with side-effectful elements:** a single rejection skips cleanup of the already-resolved ones (allocated/reserved resources leak). The safe form is `allSettled` / per-item cleanup.
+- **Check-then-set latch/debounce with an `await` between the check and the set:** two concurrent callers both pass the guard before either sets it (the dedupe/lock fails). The set must be synchronous, before the first await.
+- **Missing `await` on an async call whose completion a LATER step depends on** (a config/state/resource change that must apply before the next action). Distinguish from correct fire-and-forget (`void x()`), where nothing sequenced depends on it.
+- **Generation/epoch/version guard comparing the wrong operand:** it must compare against the LIVE counter, not a value stamped once at the start (both equal → the guard never fires).
+- **State-machine recovery/rehydration resuming an IRREVERSIBLE operation** (payment, external write, message send) instead of a safe terminal → duplicate action. Check exactly which state maps to which recovery path.
+- **A transition/update that omits a field** so a stale value (id, error, buffer, handle) leaks into the next cycle; and off-by-one in budget/count/retry comparisons (`<=` vs `<`, `>` vs `>=`).
 
 ### Logic & Correctness
 - Off-by-one errors in loops, slices, ranges
@@ -235,9 +245,11 @@ For each finding, use this exact format:
 - **Test coverage:** [Tested / Untested / Partially tested — does any test exercise this code path?]
 ---
 
-### Reconnaissance metadata (emit before findings)
+### Reconnaissance metadata (first block inside the findings delimiters)
 
-Before the `===HUNTER_FINDINGS_START===` delimiter, emit a `FINDINGS_METADATA` fenced block so downstream agents (Skeptic, Referee) know what was actually scanned. This lets the Skeptic calibrate scope confidence — any finding outside the listed files or flows is automatically suspect.
+Wrap your entire findings section in these exact delimiters, and make the `FINDINGS_METADATA` fenced block the FIRST thing inside `===HUNTER_FINDINGS_START===`. The orchestrator forwards only what is between the delimiters to the Skeptic and Referee, so this is how they learn what was actually scanned — it lets the Skeptic calibrate scope confidence, since any finding outside the listed files or flows is automatically suspect.
+
+===HUNTER_FINDINGS_START===
 
 ```findings-metadata
 stack:               <detected language(s) and framework(s), e.g. "Python / FastAPI">
@@ -248,13 +260,10 @@ cross_file_flows_analyzed: <short list of data flows traced, e.g. "user input �
 scope_notes:         <caveats: files skipped, parallel-hunter assignment, time/budget limits, profile applied>
 ```
 
-Empty or inapplicable fields must still be present — use `none` or `0` so the block stays machine-parseable.
-
-Wrap your entire findings section in these exact delimiters:
-
-===HUNTER_FINDINGS_START===
 [all BUG-N entries here]
 ===HUNTER_FINDINGS_END===
+
+Empty or inapplicable metadata fields must still be present — use `none` or `0` so the block stays machine-parseable.
 
 After the closing delimiter, output:
 

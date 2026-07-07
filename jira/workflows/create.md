@@ -72,18 +72,30 @@ Post this? [yes / edit / cancel]
 
 **Step 6: Post the ticket**
 
+Write the ADF description and create the ticket in the **same** shell — each
+Bash call is a fresh process, so a temp file written in an earlier call may not
+be visible to a later one:
+
 ```bash
 source ~/.claude/jira.env
+node -e "
+const {adf, heading, paragraph, text} = require(process.env.HOME + '/.claude/skills/jira/scripts/jira-api.js');
+const d = adf([heading('Summary'), paragraph(text('...'))]);  // build from Step 2
+require('fs').writeFileSync('/tmp/desc.json', JSON.stringify(d));
+"
 node ~/.claude/skills/jira/scripts/jira-api.js create \
   --project '{PROJECT_KEY}' \
   --summary '{summary}' \
   --type '{issueType}' \
   --priority '{priority}' \
   --labels '{label1,label2}' \
-  --description-file /tmp/jira-description-$$.json
+  --description-file /tmp/desc.json
 ```
 
 The description JSON is written to a temp file first (avoids shell quoting hell).
+
+Escape any single quotes in the substituted summary as `'\''` (e.g.
+`--summary 'Don'\''t retry on 401'`).
 
 **Step 7: Report result**
 
@@ -106,7 +118,10 @@ On failure: show the error message and offer to retry or save the draft locally.
 <edge_cases>
 - **No project context** — ask once, don't guess
 - **issueType not found** — default to Task; note it in the confirmation
-- **API 400** — usually an invalid field value; show the raw error to help diagnose
+- **API 400** — usually an invalid field value; show the raw error to help
+  diagnose. If the error is "Field 'priority' cannot be set", the project is
+  team-managed and doesn't expose priority — retry the create without
+  `--priority`.
 - **API 401** — credentials expired or wrong; direct user to run `/jira setup` again
 - **Summary > 255 chars** — truncate with "..." and note it in the draft
 </edge_cases>

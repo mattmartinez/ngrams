@@ -1,7 +1,8 @@
 ---
 name: autoresearch
-description: "Autonomous ML research loop. Iteratively modifies a training script, runs experiments on a fixed time budget, and advances the branch when results improve. Runs indefinitely without human intervention — leave it overnight and wake up to results. Invoke with /autoresearch to start a new experiment session."
+description: "Autonomous ML research loop. Iteratively modifies a training script, runs experiments on a fixed time budget, and advances the branch when results improve. Runs indefinitely without human intervention — leave it overnight and wake up to results. Use only in the autoresearch experiment project. Requires an NVIDIA GPU host. Invoke with /autoresearch to start a new experiment session."
 argument-hint: "[tag] [--resume] [--depth N] [--ideas 'hypothesis1, hypothesis2']"
+disable-model-invocation: true
 ---
 
 # Autoresearch — Autonomous ML Experiment Loop
@@ -25,6 +26,28 @@ If no tag is provided, generate one from today's date (e.g. `mar15`, `mar15b` if
 ## Phase 1: Setup
 
 Before any experiment runs, complete every step in this checklist.
+
+### 1.0 Preflight — abort gates
+
+Run these checks first, before creating any branch. If any fails, **stop and report to the user** — do not create a branch and do not enter the loop.
+
+1. **Right project.** This skill only runs in the autoresearch experiment project:
+   ```bash
+   grep -q 'name = "autoresearch"' pyproject.toml || echo "ABORT: not the autoresearch project"
+   ```
+   If it fails, tell the user this skill only runs in the autoresearch experiment project.
+
+2. **GPU present.** train.py hard-exits without CUDA:
+   ```bash
+   nvidia-smi -L
+   ```
+   If this fails or lists no GPU, tell the user this skill only runs on the NVIDIA GPU box. Do not start the loop and do not modify train.py's CUDA guard.
+
+3. **Clean working tree.** autoresearch/ lives inside the ngrams repo, and the loop uses `git reset --hard`, which would wipe unrelated uncommitted work:
+   ```bash
+   git status --porcelain
+   ```
+   If any line does **not** start with `??` (i.e. any modified or staged tracked file), stop and tell the user to commit or stash first. Untracked files are fine.
 
 ### 1.1 Agree on a run tag
 
@@ -72,6 +95,8 @@ This file is **tab-separated** (not commas). It stays untracked by git.
 
 ### 1.6 Confirm and go
 
+Before starting, make sure the session won't stall on a permission prompt hours in: the user should allowlist `Bash(git:*)` and `Bash(uv run:*)` (or run with auto-accept permissions), since the first `git reset --hard` may not fire until the first discarded experiment — possibly after they're asleep.
+
 Confirm setup looks good, then immediately begin experimentation. **Do not wait for user confirmation to start the loop.**
 
 ---
@@ -84,8 +109,8 @@ This is the core of autoresearch. It runs **indefinitely** until the human manua
 LOOP FOREVER:
     1. Plan experiment (read insights.md, check recent results)
     2. Edit train.py with the experimental change
-    3. git commit -am "experiment: <description>"
-    4. Run: uv run train.py > run.log 2>&1
+    3. git add train.py && git commit -m "experiment: <description>"
+    4. Run in background: rm -f results.json && uv run train.py > run.log 2>&1
     5. Read results (results.json or grep run.log)
     6. Log to results.tsv
     7. If improved → keep commit (advance branch)
@@ -99,17 +124,18 @@ LOOP FOREVER:
 See [references/experiment-loop.md](references/experiment-loop.md) for the complete loop protocol with all edge cases.
 
 **Key rules:**
-- **Redirect all output**: `uv run train.py > run.log 2>&1` — never let training output flood your context window.
+- **Delete stale results, then redirect all output**: `rm -f results.json && uv run train.py > run.log 2>&1`. The `rm -f` is mandatory — train.py only writes results.json on success and never clears it, so without the delete a crash leaves the *previous* run's results.json in place and gets logged as a false success. Never let training output flood your context window.
+- **Run in the background**: a run takes 6-8 minutes, past the Bash tool's default 120s timeout. Launch it with `run_in_background: true` — the harness notifies you when it exits. Between notifications, poll with `test -f results.json` or `tail -n 3 run.log`. (Foreground with `timeout: 600000` also works as a fallback — that equals the 10-minute kill threshold.)
 - **Read results from JSON**: `cat results.json` gives structured output. Fallback: `grep "^val_bpb:\|^peak_vram_mb:" run.log`.
 - **Crash handling**: If run.log has no val_bpb and no results.json, the run crashed. Run `tail -n 50 run.log` for the traceback. Fix trivial bugs (typos, imports) and re-run. If fundamentally broken, log as crash, revert, move on.
-- **Timeout**: Each experiment should take ~5 minutes of training + startup overhead. If a run exceeds 10 minutes total, kill it and treat as failure.
+- **Timeout**: Each experiment should take ~5 minutes of training + startup overhead. If a run exceeds 10 minutes total, kill it with `pkill -f train.py` and treat as failure.
 - **Never commit results.tsv**: It stays untracked.
 
 ### Crash Recovery Protocol
 
 When a run dies before producing `results.json`, classify the failure first — don't shotgun-fix. Use the elapsed wall time and the traceback (or its absence) to pick exactly one branch:
 
-- **Crash within first 30 seconds → likely OOM.** CUDA OOM most often surfaces during compile or the first few steps once memory peaks. Reduce `DEVICE_BATCH_SIZE` by 25% (e.g. 128 → 96, 96 → 72) and re-run **without** changing anything else. If the run completes, log the new device batch size as the working ceiling and continue. Do not raise `TOTAL_BATCH_SIZE` to compensate — keep gradient accumulation steps to absorb the change.
+- **Crash within first 30 seconds → likely OOM.** CUDA OOM most often surfaces during compile or the first few steps once memory peaks. Halve `DEVICE_BATCH_SIZE` (128 → 64 → 32) — it must satisfy the train.py assert `TOTAL_BATCH_SIZE % (DEVICE_BATCH_SIZE * MAX_SEQ_LEN) == 0`, so keep it a power of two — and re-run **without** changing anything else. If the run completes, log the new device batch size as the working ceiling and continue. Do not raise `TOTAL_BATCH_SIZE` to compensate — keep gradient accumulation steps to absorb the change.
 - **Crash later or with a Python traceback → targeted fix, one shot only.** Run `tail -n 50 run.log`, read the traceback, and attempt **at most one** targeted fix (an import, a typo, a shape mismatch, an off-by-one in an index). Re-run once. If it still crashes, treat the experiment as failed: revert with `git reset --hard HEAD~1`, log it in `results.tsv` as `crash`, and move on.
 - **Two consecutive experiments crash with different errors → stop guessing.** Different crash signatures mean your mental model is wrong. Do not attempt a third fix. `git reset --hard` to the last-known-good commit (the most recent `keep` row in `results.tsv`), update `insights.md` with what failed and why, and pick a new direction in a different category.
 
@@ -222,7 +248,7 @@ These are inviolable:
 2. **No new dependencies.** Only what's already in pyproject.toml.
 3. **The evaluation harness is sacred.** `evaluate_bpb` in prepare.py is ground truth. Never modify it.
 4. **The time budget is fixed.** Training always runs for the same wall-clock duration. You optimize what happens within that budget.
-5. **Never stop to ask.** The human may be asleep. Run autonomously until interrupted.
+5. **Never stop to ask.** The human may be asleep. Run autonomously until interrupted — the sole exception is an unrecoverable environment failure (no GPU, disk full, missing `~/.cache/autoresearch` data), where you stop with a report instead of looping forever.
 6. **Never commit results.tsv or insights.md.** They stay untracked.
 
 ---
@@ -241,6 +267,8 @@ These are inviolable:
   - Try more radical architectural changes
   - Try reverting to baseline and taking a completely different path
   - Remove complexity instead of adding it
+
+**The one exception — unrecoverable environment failure.** "Never stop" assumes the machine can still run experiments. If every experiment fails identically for an environment-level reason the loop cannot fix — no GPU / CUDA gone (`nvidia-smi -L` now fails), disk full, or the `~/.cache/autoresearch` data disappeared mid-session — do not keep burning tokens looping. Write a short summary to `insights.md` and stop with a report. This is the only condition that ends the loop without human interruption.
 
 At ~5 minutes per experiment, you run ~12 experiments/hour. An overnight session produces ~100 experiments. The user wakes up to a full results.tsv and an optimized model.
 

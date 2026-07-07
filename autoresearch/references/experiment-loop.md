@@ -53,11 +53,25 @@ Good commit messages help track experiment history:
 
 ## Step 4: Run the Experiment
 
+Run in the background. A run takes 6-8 minutes — well past the Bash tool's default 120s timeout — so a foreground call would be killed mid-training and every experiment would look like a crash. Launch it with the Bash tool's `run_in_background: true`:
+
 ```bash
-uv run train.py > run.log 2>&1
+rm -f results.json && uv run train.py > run.log 2>&1
 ```
 
+The leading `rm -f results.json` is mandatory: train.py only writes results.json on a successful run and never clears it, so without the delete a crash would leave the **previous** experiment's results.json in place and get logged as a false success. Deleting it up front makes "results.json absent after the run" a reliable crash signal.
+
 **Critical: redirect ALL output.** Never use `tee`. Never let training output flood your context window. The training script outputs progress lines with `\r` that would consume enormous context.
+
+### Waiting for the run
+
+The harness notifies you when a background run exits. Between notifications, poll cheaply:
+
+```bash
+test -f results.json && echo done || tail -n 3 run.log
+```
+
+`test -f results.json` tells you the run finished successfully; otherwise `tail -n 3 run.log` shows current progress. (Foreground with `timeout: 600000` also works as a fallback — that 10-minute cap equals the kill threshold below.)
 
 ### Timeout handling
 
@@ -65,17 +79,9 @@ Each run should take ~5 minutes of training + a few seconds of startup and eval 
 
 If a run exceeds 10 minutes, kill it:
 ```bash
-kill %1  # or kill the process directly
+pkill -f train.py
 ```
 Log it as a timeout/crash and move on.
-
-### Running in background
-
-Use `bg_shell` to run the experiment without blocking:
-```
-bg_shell start: uv run train.py > run.log 2>&1
-```
-Then wait for completion or poll with `digest`.
 
 ## Step 5: Read Results
 
@@ -106,7 +112,7 @@ If the run crashed:
    - **Trivial bug** (typo, missing import, wrong variable name): Fix it, amend the commit, re-run.
    - **OOM**: The model/batch is too large. Log as crash, revert, try smaller.
    - **Fundamentally broken idea**: Log as crash, revert, move on.
-3. **Don't spend more than 2-3 attempts fixing a single crash.** If it's not working, it's not worth it.
+3. **At most ONE targeted fix per traceback crash** (see SKILL.md Crash Recovery Protocol), then revert and log as `crash`. OOM follows its own path: halve `DEVICE_BATCH_SIZE` (keep it a power of two) and re-run once.
 
 ## Step 7: Log Results
 
@@ -198,7 +204,7 @@ If 3+ experiments crash in a row, something systemic is wrong. Steps:
 1. Revert to the last known-good commit
 2. Re-read train.py completely
 3. Try a minimal, conservative change
-4. If crashes persist, check for environment issues (GPU, CUDA, disk space)
+4. If crashes persist, check for environment issues (`nvidia-smi -L`, `df -h`, the `~/.cache/autoresearch` data). If this confirms an environment-level failure the loop cannot fix — no GPU, disk full, or the data has disappeared — write a short summary to `insights.md` and **stop with a report**. This is the one condition that ends the loop without human interruption; do not keep looping on an identical unrecoverable error.
 
 ### Running out of ideas
 

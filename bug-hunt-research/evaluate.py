@@ -12,7 +12,7 @@ the manifest of planted bugs and traps, then computes:
   - F1:                harmonic mean of precision and recall
   - Severity accuracy: correctly-rated bugs / total confirmed true bugs
   - Trap resistance:   1 - (traps falsely reported as bugs / total traps)
-  - Composite:         F1 × severity_accuracy × trap_resistance
+  - Composite:         F1 × (0.5 + 0.5·severity_accuracy) × trap_resistance
 
 Outputs a JSON object with all scores plus detailed match info, and
 appends a one-line summary to results.tsv if it exists.
@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -174,10 +175,12 @@ def match_bug(reported: dict, planted: dict) -> bool:
 def compute_scores(manifest: dict, confirmed: list[dict]) -> dict:
     planted = manifest["bugs"]
     traps = manifest["traps"]
+    neutral = manifest.get("neutral", [])
 
     matched_planted: set[int] = set()
     severity_correct = 0
     matched_trap_indices: set[int] = set()
+    matched_neutral_indices: set[int] = set()
     false_positives = 0
 
     for reported in confirmed:
@@ -204,7 +207,20 @@ def compute_scores(manifest: dict, confirmed: list[dict]) -> dict:
                 found_trap = True
                 break
 
-        if not found_trap:
+        if found_trap:
+            continue
+
+        # Check if it matched a known-but-unplanted (neutral) issue — a real bug
+        # the benchmark simply doesn't track. Neither rewarded nor penalized, so
+        # it does not count against precision.
+        found_neutral = False
+        for k, nb in enumerate(neutral):
+            if match_bug(reported, nb):
+                matched_neutral_indices.add(k)
+                found_neutral = True
+                break
+
+        if not found_neutral:
             false_positives += 1
 
     tp = len(matched_planted)
@@ -215,7 +231,9 @@ def compute_scores(manifest: dict, confirmed: list[dict]) -> dict:
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
     sev_acc = severity_correct / tp if tp > 0 else 0.0
     trap_res = 1.0 - (traps_triggered / len(traps)) if traps else 1.0
-    composite = f1 * sev_acc * trap_res
+    # Severity is bounded to a 0.5–1.0 multiplier so mislabeling severities can
+    # dampen — but not zero out — a run that actually found the bugs.
+    composite = f1 * (0.5 + 0.5 * sev_acc) * trap_res
 
     return {
         "composite": round(composite, 6),
@@ -231,6 +249,8 @@ def compute_scores(manifest: dict, confirmed: list[dict]) -> dict:
             "false_positives": false_positives,
             "traps_total": len(traps),
             "traps_triggered": traps_triggered,
+            "neutral_total": len(neutral),
+            "neutrals_matched": len(matched_neutral_indices),
             "matched_planted_indices": sorted(matched_planted),
             "matched_trap_indices": sorted(matched_trap_indices),
         },
@@ -309,14 +329,17 @@ def main():
 
     print(json.dumps(scores, indent=2))
 
-    # Append to results.tsv if it exists in cwd
-    tsv = Path("results.tsv")
+    # Append to results.tsv next to this script (independent of cwd).
+    tsv = Path(__file__).resolve().parent / "results.tsv"
     if tsv.exists():
-        commit = os.popen("git rev-parse --short HEAD 2>/dev/null").read().strip() or "n/a"
+        commit = subprocess.run(
+            ["git", "-C", str(tsv.parent), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True,
+        ).stdout.strip() or "n/a"
         line = (
             f"{commit}\t{scores['composite']:.6f}\t{scores['f1']:.4f}\t"
             f"{scores['recall']:.4f}\t{scores['precision']:.4f}\t"
-            f"{scores['trap_resistance']:.4f}\t{args.description}\n"
+            f"{scores['severity_accuracy']:.4f}\t{scores['trap_resistance']:.4f}\t{args.description}\n"
         )
         with open(tsv, "a") as f:
             f.write(line)

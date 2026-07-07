@@ -26,8 +26,9 @@ To see all projects in a folder at once:
 bash <skill_dir>/scripts/jenkins-api.sh health <folder>
 ```
 
-This shows the last build result for `development` and `master` branches
-of every multibranch project in the folder.
+This shows the last build result for every branch of each multibranch project
+in the folder (falls back to development/master if branch discovery fails).
+Can be slow on folders with many projects/branches — requests are sequential.
 
 ## Checking All Branches
 

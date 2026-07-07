@@ -42,7 +42,7 @@ Numbers without bounds are not "do not touch" — they are "you are off the vali
 ## DEVICE_BATCH_SIZE
 
 - Default: `128` (overridable via env var)
-- Min/Max: `16` / `192` (above ~192 OOM on most validated GPUs at depth 8). For OOM recovery, the standard step is to reduce by 25%.
+- Min/Max: `16` / `128`. Valid values are powers of two that divide `TOTAL_BATCH_SIZE / MAX_SEQ_LEN` (256 at defaults) — the validated set is `16`/`32`/`64`/`128`. (`256` divides but OOMs on validated GPUs at depth 8, so `128` is the practical max.) For OOM recovery, halve `DEVICE_BATCH_SIZE` (e.g. 128 → 64).
 - Interactions: `TOTAL_BATCH_SIZE` (must divide evenly), `grad_accum_steps`, `peak_vram_mb`. Does *not* change training dynamics — only memory layout and step time.
 - Re-baseline: **No.** Changing only DEVICE_BATCH_SIZE (with TOTAL_BATCH_SIZE held constant) is mathematically a no-op for the optimizer — the only effect is on speed and memory.
 

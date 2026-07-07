@@ -6,32 +6,31 @@ Walk through one-time credential setup so the Jira skill works from every termin
 
 **Step 1: Collect credentials**
 
-Use `secure_env_collect` to prompt for the three required values:
+Do NOT ask the user to paste the API token into the conversation — it would be
+stored in plaintext in the session history. Instead, print the heredoc below and
+have the **user** run it in their own terminal, filling in the three values. The
+`export` keyword is mandatory: the script runs as a bash subprocess and reads
+`process.env`, so plain `KEY=value` (no export) would not reach it.
 
-```
-keys:
-  - key: JIRA_BASE_URL
-    hint: "https://yourorg.atlassian.net"
-    guidance:
-      - "Go to your Jira instance in a browser"
-      - "Copy the base URL — everything up to but not including /browse or /jira"
-      - "Example: https://acme.atlassian.net"
-
-  - key: JIRA_EMAIL
-    hint: "you@example.com"
-    guidance:
-      - "The email address you use to log into Jira"
-
-  - key: JIRA_API_TOKEN
-    hint: "starts with ATATT3x..."
-    guidance:
-      - "Go to: https://id.atlassian.com/manage-profile/security/api-tokens"
-      - "Click 'Create API token'"
-      - "Give it a name like 'agent-cli' and copy the token"
-    required: true
+```bash
+cat > ~/.claude/jira.env <<'EOF'
+export JIRA_BASE_URL=
+export JIRA_EMAIL=
+export JIRA_API_TOKEN=
+EOF
+chmod 600 ~/.claude/jira.env
 ```
 
-Write to destination: `dotenv`, envFilePath: `~/.claude/jira.env`
+Per-key guidance to relay to the user:
+- **JIRA_BASE_URL** — the base URL of the Jira instance, everything up to but not
+  including `/browse` or `/jira`. Example: `https://acme.atlassian.net`
+- **JIRA_EMAIL** — the email address used to log into Jira.
+- **JIRA_API_TOKEN** — create one at
+  `https://id.atlassian.com/manage-profile/security/api-tokens` → "Create API
+  token" → name it e.g. `agent-cli` and copy it (starts with `ATATT3x...`).
+
+The token is never seen by Claude — Step 4's `whoami` verifies it without it
+ever entering the conversation.
 
 **Step 2: Create project map**
 

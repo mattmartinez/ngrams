@@ -208,5 +208,24 @@
       "category": "error-handling",
       "description": "Broad except clause — LOOKS like exception swallowing but the error is logged with full traceback (exc_info=True) and re-raised as a specific RuntimeError with 'from e' chain. This is a legitimate error-handling pattern for external service wrappers."
     }
+  ],
+
+  "neutral": [
+    {
+      "id": "NEUTRAL-01",
+      "file": "hard/auth_session.py",
+      "line_start": 21,
+      "line_end": 21,
+      "category": "security",
+      "description": "MAX_SESSIONS is defined but never enforced — SessionStore.create never checks it, so the session count is unbounded. A real but unplanted issue: reporting it is neither rewarded (recall) nor penalized (precision). Extend this list as further real extras are adjudicated from eval output."
+    },
+    {
+      "id": "NEUTRAL-02",
+      "file": "medium/data_pipeline.py",
+      "line_start": 59,
+      "line_end": 62,
+      "category": "data-integrity",
+      "description": "RecordTransformer.transform coerces missing/empty integer and float fields to 0 / 0.0, conflating 'absent' with 'zero'. A real but unplanted issue: neither rewarded nor penalized."
+    }
   ]
 }

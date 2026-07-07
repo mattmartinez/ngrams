@@ -170,9 +170,9 @@ For each attack path, use this exact format:
 - **Existing mitigations noticed:** [Any guard you saw that partially limits this — be honest; the Blue Team will check]
 ---
 
-### Reconnaissance metadata (emit before findings)
+### Reconnaissance metadata (emit as the first block inside the findings delimiters)
 
-Before the `===ATTACKER_FINDINGS_START===` delimiter, emit a `FINDINGS_METADATA` fenced block so the Blue Team and Arbiter know what was actually assessed and can calibrate scope confidence — any path referencing a file or flow outside this list is automatically suspect.
+As the first block inside the `===ATTACKER_FINDINGS_START===` / `===ATTACKER_FINDINGS_END===` delimiters, emit a `FINDINGS_METADATA` fenced block so the Blue Team and Arbiter know what was actually assessed and can calibrate scope confidence — any path referencing a file or flow outside this list is automatically suspect.
 
 ```findings-metadata
 shape:                <detected project shape(s), e.g. "network service + CLI">
@@ -189,10 +189,11 @@ scope_notes:          <caveats: zones skipped, parallel-attacker assignment, pro
 
 Empty or inapplicable fields must still be present — use `none` or `0` so the block stays machine-parseable.
 
-Wrap your entire findings section in these exact delimiters:
+Wrap your entire findings section in these exact delimiters, with the `FINDINGS_METADATA` block first, followed by the attack paths:
 
 ===ATTACKER_FINDINGS_START===
-[all ATTACK-N entries here]
+[the FINDINGS_METADATA fenced block first]
+[then all ATTACK-N entries here]
 ===ATTACKER_FINDINGS_END===
 
 After the closing delimiter, output:

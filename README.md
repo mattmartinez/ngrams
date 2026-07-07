@@ -6,7 +6,7 @@ Cognitive patterns for AI coding agents. Portable skill modules that slot into a
 
 | Project | Purpose |
 |---|---|
-| **[autoresearch](autoresearch/)** | Autonomous LLM training research agent. Fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch) with 21 cherry-picked community improvements (security, observability, robustness, agent strategy). |
+| **[autoresearch](autoresearch/)** | Autonomous LLM training research agent. Fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch) with 21 cherry-picked community improvements (security, observability, robustness, agent strategy). Also ships a `SKILL.md` and installs as the `/autoresearch` skill via `install.sh`. |
 
 ## Skills
 
@@ -29,6 +29,8 @@ Sync each skill into your Claude Code skills directory:
 ```
 
 > **Note:** `install.sh` copies every skill directory into the target. `~/.claude/skills` is the default skill directory for [Claude Code](https://claude.com/claude-code); point it elsewhere if your harness uses a different location.
+>
+> Edits in this repo are inert until you re-run `install.sh` — run it after every skill change to keep `~/.claude/skills` in sync. The sync is one-way (repo → target) and itemizes what it changes.
 
 ## One-time setup for skills with external APIs
 

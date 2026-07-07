@@ -8,6 +8,7 @@
  *   whoami                        Verify auth, print current user
  *   list-projects                 List all accessible projects
  *   create [options]              Create an issue
+ *   view KEY                      Show a single issue (description + comments)
  *   search [options]              Search with JQL
  *   bulk-update [options]         Apply field changes to every issue matching a JQL
  *
@@ -15,7 +16,7 @@
  *   --project KEY                 Jira project key (required)
  *   --summary "text"              Issue summary (required)
  *   --type Bug|Story|Task|Spike   Issue type (default: Task)
- *   --priority High|Medium|Low    Priority (default: Medium)
+ *   --priority High|Medium|Low    Priority (optional; omit for the project default)
  *   --labels "a,b,c"              Comma-separated labels
  *   --description "text"          Plain text description (converted to ADF)
  *   --description-file path.json  Pre-built ADF JSON file (preferred)
@@ -66,6 +67,21 @@ function requireCreds() {
 
 function authHeader() {
   return 'Basic ' + Buffer.from(`${EMAIL}:${TOKEN}`).toString('base64');
+}
+
+// Read a flag's value from argv. Rejects a missing value or one that is itself a
+// flag, so `--labels --apply` (value forgotten) errors instead of silently
+// consuming `--apply`. Returns null when the flag is absent. `--labels ""` still
+// works — an empty string is a value, only `--`-prefixed tokens are rejected.
+function flagValue(args, flag) {
+  const i = args.indexOf(flag);
+  if (i === -1) return null;
+  const v = args[i + 1];
+  if (v === undefined || v.startsWith('--')) {
+    console.error(`${flag} requires a value`);
+    process.exit(1);
+  }
+  return v;
 }
 
 // ── HTTP ──────────────────────────────────────────────────────────────────────
@@ -216,6 +232,22 @@ function textToAdf(str) {
   return adf(blocks.length ? blocks : [paragraph(text(str))]);
 }
 
+// Flatten an ADF document/node to plain text — enough to read a description or
+// comment body in the terminal. Not a full renderer.
+function adfToText(node) {
+  if (!node || typeof node !== 'object') return '';
+  if (node.type === 'text') return node.text || '';
+  if (node.type === 'hardBreak') return '\n';
+  const inner = (node.content || []).map(adfToText).join('');
+  switch (node.type) {
+    case 'paragraph':
+    case 'heading':
+    case 'codeBlock':   return inner + '\n';
+    case 'listItem':    return '  - ' + inner;
+    default:            return inner;
+  }
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 async function cmdWhoami() {
@@ -246,15 +278,12 @@ async function cmdCreate(args) {
   requireCreds();
 
   // Parse flags
-  const get = (flag) => {
-    const i = args.indexOf(flag);
-    return i !== -1 ? args[i + 1] : null;
-  };
+  const get = (flag) => flagValue(args, flag);
 
   const projectKey  = get('--project');
   const summary     = get('--summary');
   const issueType   = get('--type')     || 'Task';
-  const priority    = get('--priority') || 'Medium';
+  const priority    = get('--priority');
   const labelsRaw   = get('--labels')   || '';
   const descText    = get('--description');
   const descFile    = get('--description-file');
@@ -282,7 +311,7 @@ async function cmdCreate(args) {
       summary,
       description,
       issuetype:   { name: issueType },
-      priority:    { name: priority },
+      ...(priority ? { priority: { name: priority } } : {}),
       ...(labels.length ? { labels } : {}),
       ...(parentKey ? { parent: { key: parentKey } } : {}),
     },
@@ -333,13 +362,11 @@ async function searchIssues(jql, fields, maxTotal) {
 async function cmdSearch(args) {
   requireCreds();
 
-  const get = (flag) => {
-    const i = args.indexOf(flag);
-    return i !== -1 ? args[i + 1] : null;
-  };
+  const get = (flag) => flagValue(args, flag);
 
   const jql = get('--jql');
   const max  = parseInt(get('--max') || '20', 10);
+  if (!Number.isInteger(max) || max <= 0) { console.error('--max must be a positive integer'); process.exit(1); }
 
   if (!jql) { console.error('--jql is required'); process.exit(1); }
 
@@ -421,10 +448,7 @@ async function cmdBulkUpdate(args) {
 
   requireCreds();
 
-  const get = (flag) => {
-    const i = args.indexOf(flag);
-    return i !== -1 ? args[i + 1] : null;
-  };
+  const get = (flag) => flagValue(args, flag);
   const has = (flag) => args.includes(flag);
 
   const jql       = get('--jql');
@@ -433,6 +457,7 @@ async function cmdBulkUpdate(args) {
   const labelsRaw = get('--labels');
   const priority  = get('--priority');
   const max       = parseInt(get('--max') || '20', 10);
+  if (!Number.isInteger(max) || max <= 0) { console.error('--max must be a positive integer'); process.exit(1); }
   const apply     = has('--apply');
 
   if (!jql) { console.error('--jql is required'); process.exit(1); }
@@ -527,6 +552,40 @@ async function cmdBulkUpdate(args) {
   if (failed) process.exit(1);
 }
 
+async function cmdView(args) {
+  requireCreds();
+
+  const key = args[0] && !args[0].startsWith('--') ? args[0] : null;
+  if (!key) { console.error('Usage: jira-api.js view KEY'); process.exit(1); }
+
+  const fields = 'summary,description,issuetype,status,priority,assignee,labels,comment';
+  const issue = await request('GET', `/issue/${encodeURIComponent(key)}?fields=${fields}`);
+  const f = issue.fields || {};
+
+  console.log(`${issue.key}  ${f.summary || ''}`);
+  console.log(`  Type:     ${f.issuetype?.name || '—'}`);
+  console.log(`  Status:   ${f.status?.name || '—'}`);
+  console.log(`  Priority: ${f.priority?.name || '—'}`);
+  console.log(`  Assignee: ${f.assignee?.displayName || 'Unassigned'}`);
+  console.log(`  Labels:   ${(f.labels && f.labels.length) ? f.labels.join(', ') : '—'}`);
+  console.log(`  ${BASE_URL}/browse/${issue.key}`);
+
+  const desc = f.description ? adfToText(f.description).trim() : '';
+  console.log('\nDescription:');
+  console.log(desc || '  (none)');
+
+  const comments = (f.comment && f.comment.comments) || [];
+  if (comments.length) {
+    console.log(`\nComments (${comments.length}):`);
+    for (const c of comments) {
+      const who = c.author?.displayName || '?';
+      const when = (c.created || '').slice(0, 10);
+      console.log(`\n  ${who} — ${when}`);
+      console.log(adfToText(c.body).trim().split('\n').map(l => '  ' + l).join('\n'));
+    }
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 if (require.main === module) {
@@ -537,11 +596,12 @@ if (require.main === module) {
       case 'whoami':         await cmdWhoami();           break;
       case 'list-projects':  await cmdListProjects();     break;
       case 'create':         await cmdCreate(rest);       break;
+      case 'view':           await cmdView(rest);         break;
       case 'search':         await cmdSearch(rest);       break;
       case 'bulk-update':    await cmdBulkUpdate(rest);   break;
       default:
         console.error(`Unknown command: ${command || '(none)'}`);
-        console.error('Commands: whoami | list-projects | create | search | bulk-update');
+        console.error('Commands: whoami | list-projects | create | view | search | bulk-update');
         process.exit(1);
     }
   })().catch(err => {

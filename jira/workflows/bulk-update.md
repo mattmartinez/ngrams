@@ -80,22 +80,34 @@ Show the matched set and planned changes verbatim, then ask:
 About to update {N} issue(s) with the changes above. Apply? [yes / cancel]
 ```
 
-- **yes / apply / y** → re-run the same command with `--apply` appended
+- **yes / apply / y** → re-run with `--apply`, but replace the original JQL with
+  `key in (ACME-1234, ACME-1240, ...)` built from the exact keys the dry run just
+  showed — those confirmed keys become the write set. Re-running the original
+  JQL would re-match, and a time- or status-relative query (`updated < -30d`,
+  `statusCategory != Done`) can select a different set between the dry run and
+  the apply. Set `--max` to at least the number of confirmed keys.
 - **cancel / no** → acknowledge and stop without writing
-- **edit [instruction]** → tighten the JQL or change the field set, re-run dry
-  run, loop back to confirmation
+- **edit [instruction]** → tighten the JQL or change the field set, re-run the
+  dry run, loop back to confirmation. Always rebuild the `key in (...)` list from
+  the most recent dry run.
 
 Never skip the dry-run + confirmation. Bulk updates are easy to over-broaden
 and hard to undo.
 
 **Step 5: Apply**
 
+Build the apply JQL from the confirmed keys, not the original query, and raise
+`--max` to at least the number of those keys so none are silently truncated:
+
 ```bash
 node ~/.claude/skills/jira/scripts/jira-api.js bulk-update \
-  --jql '{JQL_QUERY}' \
-  ...same flags... \
+  --jql 'key in (ACME-1234, ACME-1240, ACME-1255)' \
+  ...same field flags... \
+  --max {>= number of confirmed keys} \
   --apply
 ```
+
+`key in (...)` passes the local JQL validator, so no script changes are needed.
 
 The script writes per-issue:
 

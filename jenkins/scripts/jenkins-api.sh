@@ -59,18 +59,24 @@ _jretryable() {
 
 _jfail_msg() {
   local http="$1" curl_exit="$2"
-  if [[ "$curl_exit" != "0" ]] || [[ "$http" =~ ^5 ]]; then
-    echo "Connection timeout — Jenkins may be slow or offline" >&2
+  if [[ "$curl_exit" != "0" ]]; then
+    echo "Connection failed — Jenkins may be slow or offline (curl exit $curl_exit)" >&2
+    return
   fi
+  case "$http" in
+    401|403) echo "HTTP $http auth failed — token invalid or rotated; regenerate token / re-run setup" >&2 ;;
+    404)     echo "HTTP 404 not found — check folder/project/branch names" >&2 ;;
+    5*)      echo "HTTP $http Jenkins server error" >&2 ;;
+  esac
 }
 
 jget() {
-  local url="$1"
+  local url="$1" max_time="${2:-15}"
   local retry=0 max_retries=3 sleep_s=1
   local body_file http curl_exit cause
   body_file=$(mktemp)
   while :; do
-    http=$(curl -s --max-time 15 -o "$body_file" -w '%{http_code}' \
+    http=$(curl -s --max-time "$max_time" -o "$body_file" -w '%{http_code}' \
       -u "$JENKINS_USER:$JENKINS_API_TOKEN" "$url")
     curl_exit=$?
     if [[ $curl_exit -eq 0 && "$http" =~ ^2 ]]; then
@@ -140,11 +146,17 @@ cmd_whoami() {
 
 cmd_folders() {
   require_creds
+  local data
+  data=$(jget "$JENKINS_URL/api/json")
+  if [[ $? -ne 0 || -z "$data" ]]; then
+    echo "❌ Failed to fetch folders — run 'whoami' to verify auth" >&2
+    return 1
+  fi
   echo "Top-level jobs:"
   echo ""
   printf "  %-35s %s\n" "NAME" "TYPE"
   printf "  %s\n" "$(printf '─%.0s' {1..55})"
-  jget "$JENKINS_URL/api/json" | python3 -c "
+  printf '%s' "$data" | python3 -c "
 import json,sys
 data=json.load(sys.stdin)
 for j in data.get('jobs',[]):
@@ -157,11 +169,17 @@ for j in data.get('jobs',[]):
 cmd_jobs() {
   require_creds
   local folder="$1"
+  local data
+  data=$(jget "$JENKINS_URL/job/$folder/api/json")
+  if [[ $? -ne 0 || -z "$data" ]]; then
+    echo "❌ Failed to fetch jobs in $folder/ — check the folder name and run 'whoami' to verify auth" >&2
+    return 1
+  fi
   echo "Jobs in $folder/:"
   echo ""
   printf "  %-45s %s\n" "NAME" "TYPE"
   printf "  %s\n" "$(printf '─%.0s' {1..65})"
-  jget "$JENKINS_URL/job/$folder/api/json" | python3 -c "
+  printf '%s' "$data" | python3 -c "
 import json,sys
 data=json.load(sys.stdin)
 for j in data.get('jobs',[]):
@@ -174,9 +192,15 @@ for j in data.get('jobs',[]):
 cmd_branches() {
   require_creds
   local folder="$1" project="$2"
+  local data
+  data=$(jget "$JENKINS_URL/job/$folder/job/$project/api/json")
+  if [[ $? -ne 0 || -z "$data" ]]; then
+    echo "❌ Failed to fetch branches in $folder/$project — check the folder/project names and run 'whoami' to verify auth" >&2
+    return 1
+  fi
   echo "Branches in $folder/$project:"
   echo ""
-  jget "$JENKINS_URL/job/$folder/job/$project/api/json" | python3 -c "
+  printf '%s' "$data" | python3 -c "
 import json,sys
 data=json.load(sys.stdin)
 for j in data.get('jobs',[]):
@@ -191,6 +215,7 @@ for j in data.get('jobs',[]):
 cmd_status() {
   require_creds
   local folder="$1" project="$2" branch="${3:-development}"
+  branch="${branch//\//%2F}"
   local base="$JENKINS_URL/job/$folder/job/$project/job/$branch"
   local data
   data=$(jget "$base/lastBuild/api/json?tree=number,result,timestamp,duration,displayName,building")
@@ -220,9 +245,10 @@ print(f'   URL:      {os.environ[\"J_BASE\"]}/{d[\"number\"]}/')
 cmd_log() {
   require_creds
   local folder="$1" project="$2" branch="${3:-development}" build="${4:-lastBuild}"
+  branch="${branch//\//%2F}"
   local url="$JENKINS_URL/job/$folder/job/$project/job/$branch/$build/consoleText"
   local output
-  output=$(jget "$url")
+  output=$(jget "$url" 120)
   if [[ $? -ne 0 || -z "$output" ]]; then
     echo "❌ No console output for $folder/$project/$branch #$build" >&2
     return 1
@@ -233,9 +259,10 @@ cmd_log() {
 cmd_log_tail() {
   require_creds
   local folder="$1" project="$2" branch="${3:-development}" lines="${4:-80}"
+  branch="${branch//\//%2F}"
   local url="$JENKINS_URL/job/$folder/job/$project/job/$branch/lastBuild/consoleText"
   local output
-  output=$(jget "$url")
+  output=$(jget "$url" 120)
   if [[ $? -ne 0 || -z "$output" ]]; then
     echo "❌ No console output for $folder/$project/$branch" >&2
     return 1
@@ -246,6 +273,7 @@ cmd_log_tail() {
 cmd_build() {
   require_creds
   local folder="$1" project="$2" branch="${3:-development}"
+  branch="${branch//\//%2F}"
   local url="$JENKINS_URL/job/$folder/job/$project/job/$branch/build"
   local code
   code=$(jpost "$url")
@@ -282,6 +310,7 @@ USAGE
     branch="$1"
     shift
   fi
+  branch="${branch//\//%2F}"
   if [[ $# -eq 0 ]]; then
     echo "❌ build-with-params requires at least one KEY=value pair" >&2
     return 1
@@ -322,13 +351,19 @@ USAGE
 cmd_health() {
   require_creds
   local folder="$1"
+  local data
+  data=$(jget "$JENKINS_URL/job/$folder/api/json")
+  if [[ $? -ne 0 || -z "$data" ]]; then
+    echo "❌ Failed to fetch $folder/ — check the folder name and run 'whoami' to verify auth" >&2
+    return 1
+  fi
   echo "Health: $folder/"
   echo ""
   printf "  %-40s %-12s %-12s %s\n" "PROJECT" "BRANCH" "RESULT" "AGE"
   printf "  %s\n" "$(printf '─%.0s' {1..80})"
 
-  jget "$JENKINS_URL/job/$folder/api/json" | python3 -c "
-import json,sys,urllib.request,base64,os
+  printf '%s' "$data" | J_FOLDER="$folder" JENKINS_URL="$JENKINS_URL" JENKINS_USER="$JENKINS_USER" JENKINS_API_TOKEN="$JENKINS_API_TOKEN" python3 -c "
+import json,sys,urllib.request,urllib.error,base64,os
 from datetime import datetime
 
 data=json.load(sys.stdin)
@@ -336,7 +371,7 @@ url=os.environ['JENKINS_URL']
 user=os.environ['JENKINS_USER']
 token=os.environ['JENKINS_API_TOKEN']
 creds=base64.b64encode(f'{user}:{token}'.encode()).decode()
-folder='$folder'
+folder=os.environ['J_FOLDER']
 FALLBACK_BRANCHES=['development','master']
 
 def discover_branches(project):
@@ -373,8 +408,11 @@ for j in data.get('jobs',[]):
         age_str=f'{age}d ago' if age>0 else 'today'
         sym={'SUCCESS':'✅','FAILURE':'❌','UNSTABLE':'⚠️','ABORTED':'⏹️'}.get(result,'❓')
         print(f'  {name:40s} {branch:12s} {sym} {result:10s} {age_str}')
-    except:
-      pass
+    except urllib.error.HTTPError as e:
+      if e.code!=404:
+        print(f'WARNING: {folder}/{name}/{branch} lastBuild fetch failed (HTTP {e.code})',file=sys.stderr)
+    except Exception as e:
+      print(f'WARNING: {folder}/{name}/{branch} lastBuild fetch failed ({e})',file=sys.stderr)
 "
 }
 
