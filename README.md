@@ -14,6 +14,7 @@ Cognitive patterns for AI coding agents. Portable skill modules that slot into a
 |---|---|
 | **bug-hunt** | Adversarial 3-agent bug sweep (Hunter → Skeptic → Referee) |
 | **bug-hunt-research** | Autonomous prompt optimization loop for bug-hunt. Runs bug-hunt against benchmark codebases with planted bugs & traps, scores results, keeps or reverts prompt changes. Modeled on autoresearch. |
+| **fablequery** | Frame a genuinely-engineering problem accurately so a Fable 5 subagent engages with rigor instead of a spurious safety decline. For legitimate gray-area work (own-systems automation, comparative analysis, integrity mechanics) — accurate framing, not circumvention. |
 | **jenkins** | Interact with Jenkins CI/CD — list jobs, check build status, trigger builds, read console output, diagnose failures. Credentials stored in `~/.claude/jenkins.env`. |
 | **jira** | Create and search Jira tickets from any terminal session. Credentials stored in `~/.claude/jira.env`, project aliases in `~/.claude/jira-projects.json`. Say "make this a Jira ticket" and it handles the rest. |
 | **mdthis** | Generate markdown artifacts from conversation context |
