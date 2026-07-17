@@ -8,6 +8,22 @@ Cognitive patterns for AI coding agents. Portable skill modules that slot into a
 |---|---|
 | **[autoresearch](autoresearch/)** | Autonomous LLM training research agent. Fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch) with 21 cherry-picked community improvements (security, observability, robustness, agent strategy). Also ships a `SKILL.md` and installs as the `/autoresearch` skill via `install.sh`. |
 
+## usage.py — Claude activity monitor
+
+A simple read-only monitor you can leave running in a terminal tab to watch Claude Code activity. It tails every session and subagent transcript under `~/.claude/projects` and prints a live timeline: which model actually served each turn, token counts, estimated API-equivalent cost, and any model switches (including refusal fallbacks like Fable → Opus).
+
+```bash
+python3 usage.py                 # live tail of the last 24h (Ctrl-C to stop)
+python3 usage.py --once          # print recent timeline + summary, then exit
+python3 usage.py --all           # scan all history instead of the 24h default
+python3 usage.py --daily         # per-day rollup: turns, tokens, cost, switches
+python3 usage.py --fallbacks     # only show model switches + user turns
+python3 usage.py --filter ngrams # only sessions matching a project/session substring
+python3 usage.py --since 7d      # look back 7 days (also 12h, 30m, today, ISO dates)
+```
+
+No dependencies beyond the Python 3 standard library. In live mode a per-model usage summary stays pinned at the top of the terminal while the timeline scrolls below it. Costs are estimated at current API list rates — what the usage *would* bill on the API, not what a subscription charges.
+
 ## Skills
 
 | Skill | Purpose |
