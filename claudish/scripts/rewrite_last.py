@@ -63,10 +63,14 @@ def rewrite(source: str) -> str:
     model = os.getenv("CLAUDISH_MODEL", "gemma4:12b")
     timeout = float(os.getenv("CLAUDISH_TIMEOUT", "120"))
     system = (
-        "Rewrite the assistant message into clear, natural, plain English. "
-        "Preserve every fact, qualification, name, number, command, URL, and file path. "
-        "Keep fenced code blocks unchanged. Do not answer the message or add commentary. "
-        "Output only the rewritten message."
+        "Rewrite the assistant message so a busy colleague can read it once and get it. "
+        "Rules: short sentences, everyday words, active voice. Cut filler and hedging, "
+        "but preserve every fact, qualification, name, number, command, URL, and file path. "
+        "Keep the original markdown structure (headings, lists, tables) and leave fenced "
+        "code blocks byte-for-byte unchanged. Keep necessary technical terms; don't dumb "
+        "down code or commands. Do not answer the message, add commentary, or explain "
+        "your changes. Start your output with the first word of the rewritten message — "
+        "no preamble like 'Here is the rewrite'."
     )
     body = json.dumps(
         {
