@@ -11,5 +11,5 @@ the text between the markers, exactly as written. Do not summarize, revise,
 introduce, or comment on it. Do not call another tool.
 
 <local-claudish-output>
-!`python "${CLAUDE_SKILL_DIR}/scripts/rewrite_last.py" "${CLAUDE_SESSION_ID}"`
+!`PY="$(command -v python3 || command -v python)"; [ -n "$PY" ] && exec "$PY" "${CLAUDE_SKILL_DIR}/scripts/rewrite_last.py" "${CLAUDE_SESSION_ID}"; echo "claudish: no python interpreter found on PATH"`
 </local-claudish-output>
