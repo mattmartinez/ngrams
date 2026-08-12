@@ -30,6 +30,7 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 |---|---|
 | **bug-hunt** | Adversarial 3-agent bug sweep (Hunter → Skeptic → Referee) |
 | **bug-hunt-research** | Autonomous prompt optimization loop for bug-hunt. Runs bug-hunt against benchmark codebases with planted bugs & traps, scores results, keeps or reverts prompt changes. Modeled on autoresearch. |
+| **claudish** | Manually rewrite the previous Claude response in plain English through local Ollama with `/claudish`; no automatic per-response invocation. |
 | **fablequery** | Frame a genuinely-engineering problem accurately so a Fable 5 subagent engages with rigor instead of a spurious safety decline. For legitimate gray-area work (own-systems automation, comparative analysis, integrity mechanics) — accurate framing, not circumvention. |
 | **jenkins** | Interact with Jenkins CI/CD — list jobs, check build status, trigger builds, read console output, diagnose failures. Credentials stored in `~/.claude/jenkins.env`. |
 | **jira** | Create and search Jira tickets from any terminal session. Credentials stored in `~/.claude/jira.env`, project aliases in `~/.claude/jira-projects.json`. Say "make this a Jira ticket" and it handles the rest. |
@@ -49,6 +50,53 @@ Sync each skill into your Claude Code skills directory:
 >
 > Edits in this repo are inert until you re-run `install.sh` — run it after every skill change to keep `~/.claude/skills` in sync. The sync is one-way (repo → target) and itemizes what it changes.
 
+### Claudish: manual local plain-English rewrites
+
+`/claudish` rewrites the immediately preceding Claude response through Ollama
+only when you request it. Unlike the original `claudish-to-english` display
+hook, it does not run after every response.
+
+Requirements:
+
+- Python 3 on the Claude Code machine; no third-party Python packages.
+- Ollama reachable from that machine with the configured model installed.
+- The automatic `claudish-to-english` plugin disabled if it is still installed.
+
+To install only this skill from PowerShell:
+
+```powershell
+$target = Join-Path $HOME '.claude\skills\claudish'
+New-Item -ItemType Directory -Force $target | Out-Null
+Copy-Item '.\claudish\*' $target -Recurse -Force
+```
+
+The defaults target `gemma4:12b` at `http://10.23.10.178:11434`. Override them
+in the `env` object in `~/.claude/settings.json` when needed:
+
+```json
+{
+  "env": {
+    "CLAUDISH_OLLAMA": "http://10.23.10.178:11434",
+    "CLAUDISH_MODEL": "gemma4:12b",
+    "CLAUDISH_TIMEOUT": "120"
+  }
+}
+```
+
+Restart Claude Code after changing its environment settings. After Claude
+answers, run:
+
+```text
+/claudish
+```
+
+The script reads the prior assistant response from Claude Code's local JSONL
+transcript and sends it directly to Ollama. Ollama performs the rewrite. The
+rewritten result is then inserted into the `/claudish` turn so Claude can return
+it verbatim; consequently, that result becomes part of the cloud conversation.
+Invoking the skill uses a small Claude turn, but the rewriting prompt and
+inference run locally.
+
 ## One-time setup for skills with external APIs
 
 Some skills need credentials stored outside any repo:
@@ -58,6 +106,7 @@ Some skills need credentials stored outside any repo:
 | **jira** | `~/.claude/jira.env` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
 | | `~/.claude/jira-projects.json` | alias → project key map |
 | **jenkins** | `~/.claude/jenkins.env` | `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN` |
+| **claudish** | Python 3 + `~/.claude/settings.json` (`env`) | Uses only the Python standard library. Optional `CLAUDISH_OLLAMA`, `CLAUDISH_MODEL`, and `CLAUDISH_TIMEOUT`; defaults are `http://10.23.10.178:11434`, `gemma4:12b`, and `120`. |
 
 Run `/jira setup` or `/jenkins setup` in any session to be walked through credential setup interactively.
 
