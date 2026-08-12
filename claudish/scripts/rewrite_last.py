@@ -59,7 +59,7 @@ def latest_assistant_message(path: Path) -> str:
 
 
 def rewrite(source: str) -> str:
-    base_url = os.getenv("CLAUDISH_OLLAMA", "http://10.23.10.178:11434").rstrip("/")
+    base_url = os.getenv("CLAUDISH_OLLAMA", "http://localhost:11434").rstrip("/")
     model = os.getenv("CLAUDISH_MODEL", "gemma4:12b")
     timeout = float(os.getenv("CLAUDISH_TIMEOUT", "120"))
     system = (

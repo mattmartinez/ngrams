@@ -70,13 +70,15 @@ New-Item -ItemType Directory -Force $target | Out-Null
 Copy-Item '.\claudish\*' $target -Recurse -Force
 ```
 
-The defaults target `gemma4:12b` at `http://10.23.10.178:11434`. Override them
-in the `env` object in `~/.claude/settings.json` when needed:
+The defaults target `gemma4:12b` at `http://localhost:11434`. If Ollama runs on
+another machine, override the endpoint in the `env` object in
+`~/.claude/settings.json`. The address below uses the reserved documentation IP
+`192.0.2.10`; replace it locally with the Ollama machine's private LAN address:
 
 ```json
 {
   "env": {
-    "CLAUDISH_OLLAMA": "http://10.23.10.178:11434",
+    "CLAUDISH_OLLAMA": "http://192.0.2.10:11434",
     "CLAUDISH_MODEL": "gemma4:12b",
     "CLAUDISH_TIMEOUT": "120"
   }
@@ -106,7 +108,7 @@ Some skills need credentials stored outside any repo:
 | **jira** | `~/.claude/jira.env` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
 | | `~/.claude/jira-projects.json` | alias → project key map |
 | **jenkins** | `~/.claude/jenkins.env` | `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN` |
-| **claudish** | Python 3 + `~/.claude/settings.json` (`env`) | Uses only the Python standard library. Optional `CLAUDISH_OLLAMA`, `CLAUDISH_MODEL`, and `CLAUDISH_TIMEOUT`; defaults are `http://10.23.10.178:11434`, `gemma4:12b`, and `120`. |
+| **claudish** | Python 3 + `~/.claude/settings.json` (`env`) | Uses only the Python standard library. Optional `CLAUDISH_OLLAMA`, `CLAUDISH_MODEL`, and `CLAUDISH_TIMEOUT`; defaults are `http://localhost:11434`, `gemma4:12b`, and `120`. |
 
 Run `/jira setup` or `/jenkins setup` in any session to be walked through credential setup interactively.
 
