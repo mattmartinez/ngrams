@@ -1,6 +1,6 @@
 ---
 name: fablequery
-description: Hand a genuinely-engineering problem to a Fable 5 subagent and get rigorous, adversarial engagement — by framing it accurately as the engineering problem it actually is, so a spurious safety decline doesn't waste the turn. Use when the work is legitimate engineering but sits in a gray area (own-systems automation, comparative analysis of external systems, security-adjacent or integrity mechanics) where a careless prompt reads as abuse. NOT a way to get help on work that isn't legitimate.
+description: Hand a genuinely-engineering problem to a Fable subagent and get rigorous, adversarial engagement — by framing it accurately as the engineering problem it actually is, so a spurious safety decline doesn't waste the turn. Use when the work is legitimate engineering but sits in a gray area (own-systems automation, comparative analysis of external systems, security-adjacent or integrity mechanics) where a careless prompt reads as abuse. NOT a way to get help on work that isn't legitimate.
 ---
 
 # fablequery — frame an engineering problem so Fable engages
@@ -27,7 +27,7 @@ prompt with a workaround.
 - You want an adversarial second opinion from Fable and don't want a spurious refusal to burn the turn.
 
 ## Build the query — the 8-point checklist
-Construct the Fable subagent call (Agent tool, `model: fable`) with ALL of these:
+Construct the Fable subagent call (Agent tool, `model: fable`) with these eight elements:
 
 1. **Ownership + authorization, first sentence.** "My own systems / accounts / infra, authorized use,
    within the applicable terms."
@@ -64,6 +64,11 @@ Do NOT retry verbatim or bolt on a workaround. Diagnose the ONE phrase that read
 always an abuse-coded verb — "evade," "defeat," "exploit," "spoof"), replace it with the accurate
 term, re-lead with the ownership/authorization line, and re-send. An accurate reframe engages; a
 trick does not — and shouldn't.
+
+Three phrasings raise false-positive odds on current Fable models even when the work is legitimate:
+compile-check framing (ask "are there bugs in this program?", not "does this compile without
+errors?"), a lesser-known language given with no context (include what the language is and its docs),
+and tools that return base64-encoded data into the model's context (remove them).
 
 ## Skeleton
 > You're reviewing a `<reliability / performance / forensics / systems-analysis>` problem for a

@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # Bug-Hunt Research — Autonomous Prompt Optimization Loop
 
-Run an autonomous, indefinite experiment loop that modifies the bug-hunt skill's prompts, runs them against benchmark codebases with known bugs, scores the results, and keeps or discards changes based on improvement. The agent acts as a fully autonomous prompt researcher. **Never stop. Never ask permission. Run until interrupted.**
+Run an autonomous, indefinite experiment loop that modifies the bug-hunt skill's prompts, runs them against benchmark codebases with known bugs, scores the results, and keeps or discards changes based on improvement. The agent acts as a fully autonomous prompt researcher (see Autonomy Protocol).
 
 ## Target
 
@@ -88,14 +88,14 @@ Run the current unmodified bug-hunt prompts against all benchmarks and score the
 
 **How to run a single evaluation:**
 
-1. Dispatch the 3-agent bug-hunt pipeline (hunter → skeptic → referee) as isolated Task subagents against the benchmark directory `bug-hunt-research/benchmarks/`. Never give a hunter the manifest — it is the answer key.
+1. Dispatch the 3-agent bug-hunt pipeline (hunter → skeptic → referee) as isolated Agent subagents against the benchmark directory `bug-hunt-research/benchmarks/`. Never give a hunter the manifest — it is the answer key.
 2. Capture the referee's final output to a temp file
 3. Run: `python3 bug-hunt-research/evaluate.py <referee_output_file> bug-hunt-research/manifest.json`
 4. Record the composite score and component scores
 
 ### 1.5 Begin experiments
 
-Once baseline is recorded, immediately begin the experiment loop. **Do not wait for user confirmation.**
+Once the baseline is recorded, begin the experiment loop.
 
 ---
 
@@ -122,19 +122,19 @@ can destroy the results log or unrelated work.
 
 ### Running the Bug-Hunt Pipeline
 
-For each experiment, run the full 3-agent pipeline as isolated Task subagents:
+For each experiment, run the full 3-agent pipeline as isolated Agent subagents:
 
-**Step A — Hunter**: Launch a Task subagent (subagent_type: general-purpose) with the current `hunter.md` prompt content plus the benchmark directory path (`bug-hunt-research/benchmarks/`). The hunter must read the actual benchmark files — never hand it the manifest.
+**Step A — Hunter**: Launch an Agent subagent (subagent_type: general-purpose) with the current `hunter.md` prompt content plus the benchmark directory path (`bug-hunt-research/benchmarks/`). The hunter must read the actual benchmark files — never hand it the manifest.
 
-**Step B — Skeptic**: Launch a new Task subagent with the current `skeptic.md` prompt content plus the hunter's structured findings.
+**Step B — Skeptic**: Launch a new Agent subagent with the current `skeptic.md` prompt content plus the hunter's structured findings.
 
-**Step C — Referee**: Launch a new Task subagent with the current `referee.md` prompt content plus both the hunter's and skeptic's reports.
+**Step C — Referee**: Launch a new Agent subagent with the current `referee.md` prompt content plus both the hunter's and skeptic's reports.
 
 **Step D — Score**: Save the referee output to a temp file, run `evaluate.py`, parse the JSON scores.
 
 ### Key Rules
 
-- **Capture subagent output**: Save the full text output from each Task subagent call.
+- **Capture subagent output**: Save the full text output from each Agent subagent call.
 - **One change at a time**: Don't modify all 3 prompts simultaneously. Change hunter OR skeptic OR referee in a single experiment.
 - **Crash handling**: If a subagent fails or produces unparseable output, log as crash, revert, move on.
 - **Each experiment takes ~5-10 minutes**: Budget accordingly.
@@ -168,16 +168,15 @@ Simpler prompts are better, all else equal:
 
 ### Initial Hypotheses (try these first)
 
-These are the highest-signal changes to explore early:
+Untried as of the last session — check insights.md first and drop any a later session has already tested:
 
-1. **Hunter false-positive penalty** — Add a small cost for false positives (currently "costs you nothing"). Test: "-0.5 per disproven finding", "-1 per disproven finding"
-2. **Hunter priority guidance** — Add "examine security-critical code first" or "prioritize files with user input handling"
-3. **Skeptic threshold calibration** — Test 60%, 70%, 75% confidence thresholds vs current 67%
-4. **Hunter category expansion** — Add supply-chain, configuration, dependency categories
-5. **Cross-agent information** — Pass hunter's methodology notes to skeptic, not just findings
-6. **Referee severity calibration** — Add explicit severity criteria with examples
-7. **Hunter scope management** — Add guidance for large codebases (file count limits, triage order)
-8. **Skeptic code-reading depth** — Require skeptic to read N lines of surrounding context, not just the cited lines
+1. **Hunter false-positive cost** — the Hunter is told false positives are cheap. Test stating a cost ("a finding you cannot cite code for displaces one you can") against the current wording
+2. **Skeptic threshold calibration** — Test 50%, 70%, 75% confidence thresholds vs the current 60%
+3. **Hunter category expansion** — Add supply-chain, configuration, dependency categories
+4. **Cross-agent information** — Pass hunter's methodology notes to skeptic, not just findings
+5. **Hunter scope management** — Add guidance for large codebases (file count limits, triage order)
+
+Already in the prompts — do not re-test as new ideas: hunter high-risk-file prioritization, referee severity criteria with examples, the skeptic's 50-line surrounding-context requirement.
 
 ### Category Diversity
 
@@ -242,17 +241,17 @@ Contents:
 2. **The scoring function is ground truth**. If the bug-hunt doesn't find a planted bug, that's a bug-hunt problem, not a manifest problem.
 3. **Prompt edits must describe general bug classes** — never reference a specific planted bug, its file, its line numbers, or its manifest severity. Encoding the answer key into a prompt inflates the score without improving real bug-hunting.
 4. **One variable at a time**. Each experiment changes ONE thing about ONE prompt.
-5. **Never stop to ask** — the human may be asleep — UNLESS the environment is broken (benchmarks or `evaluate.py` missing, git unavailable): then write a note to insights.md and stop.
+5. **Run autonomously** — see Autonomy Protocol for the one condition that ends the loop.
 6. **results.tsv and insights.md are tracked** — commit them with each experiment (Phase 2). Never `git commit -am` or `git reset --hard`; both reach beyond `bug-hunt/`.
 
 ---
 
 ## Autonomy Protocol
 
-**NEVER STOP.** Once the experiment loop begins:
+You are operating autonomously. The user is not watching in real time and cannot answer questions mid-task, so asking "should I keep going?" or "is this a good stopping point?" blocks the work — for the reversible actions the loop consists of, proceed without asking. Before ending a turn, check your last paragraph: if it is a plan, an analysis, or a promise about work you have not done, do that work now. Run until interrupted.
 
-- Do NOT pause to ask the human if you should continue.
-- Do NOT ask "should I keep going?" or "is this a good stopping point?"
-- If you run out of ideas, re-read all prompt files from scratch, re-read insights.md, try combining successes, try radical restructuring, try deletion.
+**The one exception — a broken environment.** If the benchmarks or `evaluate.py` are missing or git is unavailable, the loop cannot produce a result: write a note to insights.md and stop with a report.
+
+If you run out of ideas, re-read all prompt files from scratch, re-read insights.md, try combining successes, try radical restructuring, try deletion.
 
 At ~5-10 minutes per experiment, you run ~6-12 experiments/hour. An overnight session produces ~50-100 prompt variations tested. The user wakes up to optimized bug-hunt prompts.

@@ -6,7 +6,7 @@ argument-hint: "[path/to/scan] [--diff] [--commit sha] [--pr number]"
 
 # Bug Hunt - Adversarial Bug Finding
 
-Run a 3-agent adversarial bug hunt on your codebase. Each agent runs in isolation as isolated Task tool subagents.
+Run a 3-agent adversarial bug hunt on your codebase. Each agent runs as an isolated Agent tool subagent.
 
 ## Target
 
@@ -95,7 +95,7 @@ find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" \
   grep -v '\.spec\.' | wc -l
 ```
 
-- **If > 50 source files:** Run multiple Hunter agents in parallel by issuing multiple Task calls in a single message, each assigned a different directory/module; merge findings before the Skeptic.
+- **If > 50 source files:** Run multiple Hunter agents in parallel by issuing multiple Agent calls in a single message, each assigned a different directory/module; merge findings before the Skeptic.
 - **If > 150 source files:** Run a recon agent first to identify the highest-risk modules (auth, data access, API handlers, config, payment/permissions, parsing), then dispatch parallel Hunters scoped to those modules only — do not scan the whole tree.
   _Rationale:_ Token and time budget for a single Hunter run scales with file count. Beyond ~150 files the recon-then-targeted-hunters pattern produces higher-fidelity findings than a single broad scan, and avoids context exhaustion on the Hunter.
 
@@ -111,7 +111,7 @@ Append the relevant framework-specific checklist to the Hunter's task (see the l
 
 ### Step 2: Run the Hunter Agent
 
-Launch a new Task tool subagent (subagent_type: general-purpose):
+Launch a new Agent tool subagent (subagent_type: general-purpose):
 - task: Include the hunter prompt text AND the scan target path AND the detected stack-specific checklist. The Hunter must use tools (Read, Bash with find/grep) to examine actual code.
 
 **Parallel-hunter BUG-ID namespacing:** When running multiple Hunters in parallel (per the Step 1.5 thresholds), assign each Hunter a distinct BUG-ID prefix so findings remain unique across the merge. The assignment scheme is:
@@ -134,8 +134,8 @@ If the Hunter reported TOTAL FINDINGS: 0, skip Steps 3-4 and go directly to Step
 
 ### Step 3: Run the Skeptic Agent
 
-Launch a new Task tool subagent (subagent_type: general-purpose):
-- task: Include the skeptic prompt text AND the Hunter's structured findings (content between the `===HUNTER_FINDINGS_START===` and `===HUNTER_FINDINGS_END===` delimiters — BUG-IDs, files, lines, claims, evidence, severity, points). Do NOT include narrative or methodology text — only the structured findings.
+Launch a new Agent tool subagent (subagent_type: general-purpose):
+- task: Include the skeptic prompt text AND the Hunter's structured findings (content between the `===HUNTER_FINDINGS_START===` and `===HUNTER_FINDINGS_END===` delimiters — BUG-IDs, files, lines, claims, evidence, severity). Do NOT include narrative or methodology text — only the structured findings.
 
 The Skeptic must independently read the code to verify each claim.
 
@@ -143,7 +143,7 @@ Extract the content between `===SKEPTIC_REPORT_START===` and `===SKEPTIC_REPORT_
 
 ### Step 4: Run the Referee Agent
 
-Launch a new Task tool subagent (subagent_type: general-purpose):
+Launch a new Agent tool subagent (subagent_type: general-purpose):
 - task: Include the referee prompt text AND both:
   - The Hunter's full findings (between `===HUNTER_FINDINGS_START===` / `===HUNTER_FINDINGS_END===`)
   - The Skeptic's full report (between `===SKEPTIC_REPORT_START===` / `===SKEPTIC_REPORT_END===`)

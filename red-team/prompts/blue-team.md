@@ -21,32 +21,19 @@ For EACH attack path:
    - **Control efficacy** — if a guard exists, does it actually defeat the step, or is it bypassable (wrong order, incomplete allow-list, normalization gap)?
    - **Asset reality** — does the path actually reach something valuable, or does it dead-end?
 4. For a **chain**, the defense only has to hold at one link. If any single link is stopped by a control or an unmeetable precondition, the whole chain is defended — say which link holds. The attack is exploitable only if *every* link survives.
-5. You MUST read the code before judging. Do not reason theoretically, and do not concede a path is exploitable just because it sounds plausible — verify that the defenses really fail.
 
-**Important:** Marking a path exploitable without reading the code is not acceptable. Verify every path independently, whether you find it defended or exploitable.
+Verify every path against the code, whether you find it defended or exploitable — do not concede a path is exploitable because it sounds plausible, and do not call it defended on a control you have not read.
 
-## Scoring
+## Decision rule
 
-- Correctly mark a path DEFENDED and name the control/precondition that stops it: +[path's original points]
-- Mark a genuinely exploitable path as DEFENDED (you missed a real attack): −[1.5 × points]   ← the expensive mistake; a missed live attack is far worse than over-reporting one
-- Mark a path EXPLOITABLE when the defenses actually do hold: −[0.5 × points]
-- Correctly mark a path EXPLOITABLE: 0 (neutral — expected)
-
-## Risk calculation
-
-Before each decision, compute expected value:
-- DEFENDED and right: +[points] · DEFENDED and wrong: −[1.5 × points]
-- EXPLOITABLE and right: 0 · EXPLOITABLE and wrong: −[0.5 × points]
-
-For DEFENDED: EV = (confidence% × points) − ((100 − confidence%) × 1.5 × points) → only mark DEFENDED when confidence > 60% that a control or precondition genuinely stops the path.
-For EXPLOITABLE: only mark it without deep analysis when confidence > 90% that the defenses fail and the path is live. Anything in between requires thorough investigation.
+Mark a path DEFENDED only when you are confident (better than 60%) that a control or unmeetable precondition you can cite stops a link. Missing a live attack is the expensive mistake — far worse than over-reporting one — so when the evidence is mixed, mark it EXPLOITABLE, state your confidence, and name the link that would settle it. Mark EXPLOITABLE without deep analysis only when the defenses plainly fail (90%+); anything in between gets a full investigation.
 
 ## Output format
 
 For each attack path:
 
 ---
-**ATTACK-[number]** | Original: [points] pts | Severity: [Attacker's rating]
+**ATTACK-[number]** | Severity: [Attacker's rating]
 - **Verification method:** [What code did you read at each step? Did you trace the full call graph from entry to sink? What guards/controls did you check for?]
 - **Precondition check:** [Can the persona actually meet it? Cite what makes it reachable or not.]
 - **Control analysis:** [Which guards exist on this path, where (file:line), and do they actually defeat a step or not? Name any deployed control that applies.]
@@ -66,9 +53,8 @@ Wrap your entire report in these exact delimiters:
 After the closing delimiter, output:
 
 **SUMMARY:**
-- Paths defended (mitigated): [count] (total points claimed: [sum])
+- Paths defended (mitigated): [count]
 - Paths exploitable (defenses fail): [count]
-- Your final score: [net points]
 
 **EXPLOITABLE LIST:**
 [List only the ATTACK-IDs you found EXPLOITABLE, with their severity]

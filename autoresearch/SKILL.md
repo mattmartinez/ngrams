@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # Autoresearch — Autonomous ML Experiment Loop
 
-Run an autonomous, indefinite experiment loop that modifies a training script, measures results against a fixed evaluation metric, and keeps or discards changes based on improvement. The agent acts as a fully autonomous researcher: if an idea works, advance; if it doesn't, revert and try something new. **Never stop. Never ask permission. Run until interrupted.**
+Run an autonomous, indefinite experiment loop that modifies a training script, measures results against a fixed evaluation metric, and keeps or discards changes based on improvement. The agent acts as a fully autonomous researcher: if an idea works, advance; if it doesn't, revert and try something new (see Autonomy Protocol).
 
 ## Target
 
@@ -97,7 +97,7 @@ This file is **tab-separated** (not commas). It stays untracked by git.
 
 Before starting, make sure the session won't stall on a permission prompt hours in: the user should allowlist `Bash(git:*)` and `Bash(uv run:*)` (or run with auto-accept permissions), since the first `git reset --hard` may not fire until the first discarded experiment — possibly after they're asleep.
 
-Confirm setup looks good, then immediately begin experimentation. **Do not wait for user confirmation to start the loop.**
+Confirm setup looks good, then begin experimentation.
 
 ---
 
@@ -248,27 +248,24 @@ These are inviolable:
 2. **No new dependencies.** Only what's already in pyproject.toml.
 3. **The evaluation harness is sacred.** `evaluate_bpb` in prepare.py is ground truth. Never modify it.
 4. **The time budget is fixed.** Training always runs for the same wall-clock duration. You optimize what happens within that budget.
-5. **Never stop to ask.** The human may be asleep. Run autonomously until interrupted — the sole exception is an unrecoverable environment failure (no GPU, disk full, missing `~/.cache/autoresearch` data), where you stop with a report instead of looping forever.
+5. **Run autonomously** — see Autonomy Protocol below for the one condition that ends the loop.
 6. **Never commit results.tsv or insights.md.** They stay untracked.
 
 ---
 
 ## Autonomy Protocol
 
-**NEVER STOP.** Once the experiment loop begins:
+You are operating autonomously. The user is not watching in real time and cannot answer questions mid-task, so asking "should I keep going?" or "is this a good stopping point?" blocks the work — for the reversible actions the loop consists of, proceed without asking. Before ending a turn, check your last paragraph: if it is a plan, an analysis, or a promise about work you have not done, do that work now. Run until interrupted.
 
-- Do NOT pause to ask the human if you should continue.
-- Do NOT ask "should I keep going?" or "is this a good stopping point?"
-- The human might be asleep. They expect you to work **indefinitely**.
-- If you run out of ideas, think harder:
-  - Re-read train.py from scratch
-  - Re-read insights.md for unexplored hypotheses
-  - Try combining previous successes
-  - Try more radical architectural changes
-  - Try reverting to baseline and taking a completely different path
-  - Remove complexity instead of adding it
+**The one exception — unrecoverable environment failure.** If every experiment fails identically for an environment-level reason the loop cannot fix — no GPU / CUDA gone (`nvidia-smi -L` fails), disk full, or the `~/.cache/autoresearch` data disappeared mid-session — do not keep burning tokens looping. Write a short summary to `insights.md` and stop with a report. This is the only condition that ends the loop without human interruption.
 
-**The one exception — unrecoverable environment failure.** "Never stop" assumes the machine can still run experiments. If every experiment fails identically for an environment-level reason the loop cannot fix — no GPU / CUDA gone (`nvidia-smi -L` now fails), disk full, or the `~/.cache/autoresearch` data disappeared mid-session — do not keep burning tokens looping. Write a short summary to `insights.md` and stop with a report. This is the only condition that ends the loop without human interruption.
+If you run out of ideas:
+- Re-read train.py from scratch
+- Re-read insights.md for unexplored hypotheses
+- Try combining previous successes
+- Try more radical architectural changes
+- Try reverting to baseline and taking a completely different path
+- Remove complexity instead of adding it
 
 At ~5 minutes per experiment, you run ~12 experiments/hour. An overnight session produces ~100 experiments. The user wakes up to a full results.tsv and an optimized model.
 

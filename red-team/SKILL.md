@@ -6,7 +6,7 @@ argument-hint: "[path/to/assess] [--diff] [--commit sha] [--pr number]"
 
 # Red Team — Adversarial Attack-Path Assessment
 
-Run a 3-agent adversarial red-team assessment on a codebase **you own or are explicitly authorized to test**. Each agent runs as an isolated subagent (in Claude Code, the Task tool with a general-purpose agent).
+Run a 3-agent adversarial red-team assessment on a codebase **you own or are explicitly authorized to test**. Each agent runs as an isolated subagent (in Claude Code, the Agent tool with a general-purpose agent).
 
 Where a bug hunt asks *"is this code correct?"*, a red team asks *"how would an adversary abuse this to reach something they shouldn't?"* The unit of work is not a defect on a line — it is an **attack path**: a precondition, a sequence of steps a chosen attacker persona can actually perform, and the asset it compromises. Isolated weaknesses matter only insofar as they form, or chain into, a reachable path to an asset.
 
@@ -111,7 +111,7 @@ find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" \
 
 In `--diff`/`--commit`/`--pr` modes, skip the `find` — the file count is the length of the resolved changed-file list; pipe that list through the same exclusion greps, then `wc -l`.
 
-- **If > 50 files:** Run multiple Attacker agents in parallel by dispatching multiple Task calls in parallel, each assigned a different **trust zone or entry-point class** (e.g., one for the public API surface, one for auth/session, one for data access, one for infra/CI/config). Merge their attack paths before passing to the Blue Team.
+- **If > 50 files:** Run multiple Attacker agents in parallel by dispatching multiple Agent calls in parallel, each assigned a different **trust zone or entry-point class** (e.g., one for the public API surface, one for auth/session, one for data access, one for infra/CI/config). Merge their attack paths before passing to the Blue Team.
 - **If > 150 files:** Run a quick recon agent first to map entry points and trust boundaries, then assign Attackers only to the highest-value zones (anything reachable by an unauthenticated or low-privilege persona, and anything adjacent to a crown jewel).
 - **If > 200 files:** Always recon-first. Map external input sources → sensitive sinks, identify which modules sit on a trust boundary, and dispatch parallel Attackers scoped to those modules only. Do not attempt to assess the whole tree in one pass.
   _Rationale:_ Attack surface is concentrated at trust boundaries. A targeted assessment of boundary code produces higher-fidelity attack paths than a uniform sweep, and avoids context exhaustion.
@@ -132,7 +132,7 @@ network service / web app, CLI or desktop tool, library / SDK, long-running daem
 
 ### Step 2: Run the Attacker Agent
 
-Dispatch a new isolated Task subagent (subagent_type: general-purpose) — or multiple parallel Task calls for large codebases:
+Dispatch a new isolated Agent subagent (subagent_type: general-purpose) — or multiple parallel Agent calls for large codebases:
 - task: Include the attacker prompt text AND the assessment target path AND the detected project shape(s) AND any profile crown jewels/personas and severity overrides. The Attacker must use tools (Read, Bash with find/grep) to examine actual code — it may not speculate about files it hasn't read.
 
 **Parallel-attacker ATTACK-ID namespacing:** When running multiple Attackers in parallel (per the Step 1.5 thresholds), assign each a distinct ATTACK-ID prefix so paths remain unique across the merge:
@@ -153,7 +153,7 @@ If the Attacker reported TOTAL ATTACK PATHS: 0, skip Steps 3–4 and go directly
 
 ### Step 3: Run the Blue Team Agent
 
-Dispatch a new isolated Task subagent (subagent_type: general-purpose):
+Dispatch a new isolated Agent subagent (subagent_type: general-purpose):
 - task: Include the blue-team prompt text, any profile-declared deployed controls, AND the Attacker's structured findings (content between the `===ATTACKER_FINDINGS_START===` / `===ATTACKER_FINDINGS_END===` delimiters). Do NOT include narrative or methodology text — only the structured attack paths.
 
 The Blue Team is the defender. It must independently read the code and rule each path **DEFENDED** or **EXPLOITABLE**: are the preconditions satisfiable by the named persona? Does an existing control (auth check, validation, sandbox, network boundary, rate limit) stop a link in the chain? Is the asset actually reachable?
@@ -162,7 +162,7 @@ Extract the content between `===BLUE_TEAM_REPORT_START===` and `===BLUE_TEAM_REP
 
 ### Step 4: Run the Arbiter Agent
 
-Dispatch a new isolated Task subagent (subagent_type: general-purpose):
+Dispatch a new isolated Agent subagent (subagent_type: general-purpose):
 - task: Include the arbiter prompt text AND any profile-declared severity overrides AND both:
   - The Attacker's full findings (between `===ATTACKER_FINDINGS_START===` / `===ATTACKER_FINDINGS_END===`)
   - The Blue Team's full report (between `===BLUE_TEAM_REPORT_START===` / `===BLUE_TEAM_REPORT_END===`)

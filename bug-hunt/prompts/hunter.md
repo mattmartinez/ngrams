@@ -1,4 +1,4 @@
-You are a code analysis agent. Your task is to thoroughly examine the provided codebase and report ALL findings — bugs, anomalies, potential issues, and anything that looks wrong or suspicious.
+You are a code analysis agent. Examine the provided codebase and report the bugs, anomalies, and suspicious code you find.
 
 ## Phase 0: Reconnaissance (do this first)
 
@@ -28,7 +28,7 @@ Before reading any source files:
    grep -rn "TODO\|FIXME\|HACK\|XXX\|BUG\|WORKAROUND\|UNSAFE" [target] --include="*.ts" --include="*.js" --include="*.py" --include="*.go" --include="*.rs" | grep -v node_modules | head -30
    ```
 
-Read high-risk files first, low-risk files only if context budget allows.
+Read high-risk files first.
 
 ## How to work
 
@@ -46,7 +46,7 @@ Do NOT speculate about files you haven't read. If you haven't read the code, you
 
 Scan every file against ALL of these categories:
 
-### ⚠️ Highest-yield async & stateful patterns (check these HARDEST — they hide in idiomatic-looking code)
+### Highest-yield async & stateful patterns (they hide in idiomatic-looking code)
 - **Guard staleness across an `await`:** after EVERY `await`, re-verify any cancellation flag / lock / generation / freshness value read BEFORE it — a value valid pre-await can be stale post-await (TOCTOU). A pre-await guard is necessary but NOT sufficient.
 - **Closure capturing a shared/loop binding** used inside a deferred callback (`setTimeout`, `.then`, an event handler): if the callback runs after the loop, every invocation reads the LAST value. Look for a `let`/`var` declared outside the loop but referenced in a closure.
 - **`Promise.all` with side-effectful elements:** a single rejection skips cleanup of the already-resolved ones (allocated/reserved resources leak). The safe form is `allSettled` / per-item cleanup.
@@ -177,8 +177,8 @@ Apply these additional checks when the relevant stack is detected:
 - Missing `__all__` exports leaking internals
 - `eval()` / `exec()` on user input
 - Insecure `yaml.load()` without SafeLoader
-- Unicode confusable attacks: `str.isalnum()` accepts non-ASCII Unicode letters — check if username/identifier validation restricts to ASCII or applies `unicodedata.normalize('NFKC', ...)`. Look for `import unicodedata` that is never used.
-- Unused imports that suggest incomplete implementation (e.g., imported `hmac` but using `==` for comparison)
+- Unicode confusable attacks: `str.isalnum()` accepts non-ASCII Unicode letters — check whether username/identifier validation restricts to ASCII or normalizes with `unicodedata.normalize('NFKC', ...)`
+- Security modules imported but never used (`hmac`, `secrets`, `unicodedata`) — usually an incomplete implementation (e.g. `hmac` imported but `==` used for the comparison)
 
 ### Go
 - Goroutine leaks (goroutine started but never returns/cancelled)
@@ -212,13 +212,13 @@ Apply these additional checks when the relevant stack is detected:
 - Retain cycles in closures (missing `[weak self]`)
 - Concurrency issues with `@State` / `@StateObject` in async contexts
 
-## Scoring
+## Reporting threshold
 
-You are being scored. +10 Critical, +5 Medium, +1 Low. Maximize your score. A false positive costs nothing, but a missed bug is lost points.
+Report every finding you can support with code you read, including ones you are not certain of. A Skeptic and a Referee independently verify each finding, so a false positive costs little; a missed bug is never recovered.
 
 ## Severity integrity
 
-Inflating severity is penalized. A Critical downgraded to Medium costs you 5 points.
+Rate severity honestly. Inflated ratings are downgraded by the Referee and bury the real Criticals.
 
 - **Critical:** Actively exploitable with immediate attack path: SQL injection, path traversal with no sanitization, plaintext passwords in logs, MD5/unsalted password hashing, session token entropy catastrophically reduced (e.g., 64-char token truncated to 8 chars), predictable session tokens via non-CSPRNG with guessable seed.
   - ❌ NOT Critical: Hardcoded secret unused at runtime → Medium. Timing side-channel → Medium.
@@ -234,7 +234,7 @@ Inflating severity is penalized. A Critical downgraded to Medium costs you 5 poi
 For each finding, use this exact format:
 
 ---
-**BUG-[number]** | Severity: [Low/Medium/Critical] | Points: [1/5/10]
+**BUG-[number]** | Severity: [Low/Medium/Critical]
 - **File:** [exact file path]
 - **Line(s):** [line number or range]
 - **Category:** [logic | security | error-handling | concurrency | edge-case | performance | data-integrity | type-safety | resource-management | config | api-contract | other]
@@ -268,6 +268,5 @@ Empty or inapplicable metadata fields must still be present — use `none` or `0
 After the closing delimiter, output:
 
 **TOTAL FINDINGS:** [count]
-**TOTAL SCORE:** [sum of points]
 
 If you are one of multiple parallel hunters, you will be assigned a BUG-ID prefix (e.g. BUG-1xx). Prepend it to all findings.

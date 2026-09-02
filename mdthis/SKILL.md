@@ -39,12 +39,11 @@ $ARGUMENTS
 
 ## Quality Rules
 
-- Be concise. Match the density the format calls for — a Jira ticket is tighter than a findings doc. Paste-destination formats (tickets, PR comments) should be paste-ready: roughly 40 lines or fewer.
+- Be concise. Match the density the format calls for — a Jira ticket is tighter than a findings doc. Paste-destination formats (tickets, PR comments) should read as a finished ticket or comment, not as a report about one.
 - Never copy secret values (credentials, tokens, API keys, connection strings, private keys) from the conversation into the file; replace each with `<REDACTED>` or a reference to where it lives (e.g. `~/.claude/jira.env`). Query results and technical details are fine — redact secret values only.
 - Use the conversation's actual technical details, not generic placeholders.
-- Do not pad with boilerplate or filler sections.
+- The file is the deliverable: only the sections its reader needs, and nothing about how or by what it was produced.
 - If the directive is ambiguous about scope (e.g., "latest findings" but there were many topics), focus on the most recent/primary thread of discussion.
-- Do not include meta-commentary about the skill itself in the output file.
 
 ## Directive Patterns
 

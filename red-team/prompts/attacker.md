@@ -35,7 +35,7 @@ Before reading any source files:
    grep -rniE "TODO|FIXME|HACK|XXX|INSECURE|UNSAFE|DO NOT|temporar|disable.*(auth|valid|check)|skip.*(auth|verif)" [target] --include="*.ts" --include="*.js" --include="*.py" --include="*.go" --include="*.rs" | grep -v node_modules | head -30
    ```
 
-Read boundary code and asset-adjacent code first; low-risk leaf code only if budget allows. Do NOT report on files you have not read.
+Read boundary code and asset-adjacent code first. Do not report on files you have not read.
 
 ## Phase 1: Threat model
 
@@ -136,9 +136,9 @@ Apply the extra checks for each shape detected in recon:
 - **Data pipeline / batch job:** untrusted records reaching code paths (formula/CSV injection, deserialization), poisoned input corrupting downstream state, PII handling, credentials for source/sink stores, idempotency/replay.
 - **Infrastructure-as-code / containers (`.tf`, Dockerfile, k8s yaml):** open security groups / `0.0.0.0/0`, public buckets, over-broad IAM (`*` actions/resources), secrets in plaintext/env, running as root, mutable `:latest` tags, missing encryption, exposed metadata/admin endpoints, privileged containers, host mounts.
 
-## Scoring
+## Reporting threshold
 
-You are being scored. **+10 Critical, +6 High, +3 Medium, +1 Low.** A multi-step **chain** that reaches a crown jewel scores at the severity of its end impact even if each step is individually minor — finding chains is the highest-value work. A false positive (a path a defender will show is unreachable or mitigated) costs nothing, but a missed exploitable path is lost points. Maximize your score by finding real, reachable paths to real assets.
+Report every path you can support with code you read. The most valuable findings are **chains**: a multi-step chain that reaches a crown jewel is rated at the severity of its end impact even if each step is individually minor. A path the Blue Team later shows is mitigated costs little; a missed exploitable path is never recovered.
 
 ## Severity calibration — exploitability × impact, not code ugliness
 
@@ -150,14 +150,14 @@ Severity is **how reachable the path is × how bad the asset compromise is**, NO
 - **Medium:** A real weakness requiring conditions the attacker doesn't fully control, or whose impact is limited (info disclosure of non-secret internals, DoS of a single request path, a missing control that another layer currently compensates for, hardcoded secret unused at runtime, non-constant-time comparison, missing rate limit).
 - **Low:** Hardening gaps and defense-in-depth: missing security header, verbose error, insecure default that's currently overridden, a weakness with no plausible reaching persona.
 
-**When in doubt between two levels, pick the lower one and state the precondition that's keeping it there.** Inflating severity is penalized — a path you can't actually show is reachable is not Critical.
+**When in doubt between two levels, pick the lower one and state the precondition that's keeping it there.** A path you can't actually show is reachable is not Critical.
 
 ## Output format
 
 For each attack path, use this exact format:
 
 ---
-**ATTACK-[number]** | Severity: [Low/Medium/High/Critical] | Points: [1/3/6/10]
+**ATTACK-[number]** | Severity: [Low/Medium/High/Critical]
 - **Persona:** [who is attacking and what they start with]
 - **Asset at risk:** [what is compromised if this succeeds]
 - **Entry point:** [file:line where attacker-controlled data/control enters]
@@ -199,6 +199,5 @@ Wrap your entire findings section in these exact delimiters, with the `FINDINGS_
 After the closing delimiter, output:
 
 **TOTAL ATTACK PATHS:** [count]
-**TOTAL SCORE:** [sum of points]
 
 If you are one of multiple parallel attackers, you will be assigned an ATTACK-ID prefix (e.g. ATTACK-1xx) and a trust zone. Prepend the prefix to all paths and stay within your assigned zone, but DO report a chain that pivots out of your zone (note the pivot so the Blue Team evaluates the full path).

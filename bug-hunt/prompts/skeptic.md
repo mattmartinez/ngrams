@@ -11,44 +11,23 @@ For EACH reported bug:
 4. Analyze whether the reported issue is real given the full context
 5. If you believe it's NOT a bug, explain exactly why — cite the specific code that disproves it
 6. If you believe it IS a bug, explain exactly why — cite the specific code that confirms it
-7. You MUST read the code before making any judgment — do not argue theoretically
 
-**Important:** Accepting a bug without reading the code is not acceptable. You must verify every finding independently, whether you accept or disprove it.
+Verify every finding against the code, whether you end up accepting or disproving it — a judgment made from the Hunter's report alone is worthless to the Referee.
 
-## Scoring
+## Decision rule
 
-- Successfully disprove a false positive: +[bug's original points]
-- Wrongly dismiss a real bug: -[1.5 x bug's original points]
-- Accept a bug that IS a false positive: -[0.5 x bug's original points]
-- Accept a bug that IS real: 0 points (neutral — it's expected)
-
-The penalty for rubber-stamping false positives means you must actually investigate. Accepting without reading the code costs you points. The penalty for wrongly dismissing a real bug is higher, so only disprove when you're confident.
-
-## Risk calculation
-
-Before each decision, calculate your expected value:
-- If you DISPROVE and you're right: +[points]
-- If you DISPROVE and you're wrong: -[1.5 x points]
-- If you ACCEPT and it's real: 0 points
-- If you ACCEPT and it's false: -[0.5 x points]
-
-For DISPROVE: EV = (confidence% × points) - ((100 - confidence%) × 1.5 × points)
-→ Only DISPROVE when confidence > 60%
-
-For ACCEPT: Only accept without deep analysis if confidence > 90% that it's real.
-For anything in between, you MUST do thorough investigation.
+Disprove a finding only when you are confident (better than 60%) that code you can cite rules it out. Wrongly dismissing a real bug is the expensive mistake — worse than accepting a false positive — so when the evidence is mixed, accept it, state your confidence, and say what would settle it. Accept without deep analysis only when the bug is plainly real (90%+); anything in between gets a full investigation.
 
 ## Output format
 
 For each bug:
 
 ---
-**BUG-[number]** | Original: [points] pts
+**BUG-[number]** | Hunter severity: [Low/Medium/Critical]
 - **Verification method:** [What code did you read? What files/lines did you check? Did you trace the calling context? Did you check for guards upstream?]
 - **Counter-argument:** [Your specific technical argument, citing code. If accepting, explain what confirms the bug.]
 - **Evidence:** [Quote the actual code or behavior that supports your position]
 - **Confidence:** [0-100]%
-- **Risk calc:** EV = ([confidence]% × [points]) - ([100-confidence]% × [1.5 × points]) = [value] (for DISPROVE) or EV(accept) = -([100-confidence]% × 0.5 × [points]) (for ACCEPT)
 - **Decision:** DISPROVE / ACCEPT
 ---
 
@@ -61,9 +40,8 @@ Wrap your entire report in these exact delimiters:
 After the closing delimiter, output:
 
 **SUMMARY:**
-- Bugs disproved: [count] (total points claimed: [sum])
+- Bugs disproved: [count]
 - Bugs accepted as real: [count]
-- Your final score: [net points]
 
 **ACCEPTED BUG LIST:**
 [List only the BUG-IDs that you ACCEPTED, with their original severity]
