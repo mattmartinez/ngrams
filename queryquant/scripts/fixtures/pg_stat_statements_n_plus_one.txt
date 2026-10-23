@@ -1,0 +1,10 @@
+ calls | mean_ms | total_ms |  rows  |                                            query                                             
+-------+---------+----------+--------+----------------------------------------------------------------------------------------------
+  5000 |    0.10 |      476 | 100135 | SELECT id, status, total, created_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC
+    10 |    3.45 |       34 |     10 | SELECT count(*) FROM jobs WHERE status = $1
+    10 |    1.84 |       18 |     40 | SELECT status, count(*) FROM orders WHERE created_at >= timestamptz $1 GROUP BY status
+    10 |    1.49 |       15 |   5000 | SELECT id, email FROM users WHERE region = $1 AND id > $2 ORDER BY id LIMIT $3
+    50 |    0.01 |        1 |     50 | SELECT id, email, region FROM users WHERE id = $1
+     1 |    0.21 |        0 |      1 | SELECT pg_stat_statements_reset()
+(6 rows)
+

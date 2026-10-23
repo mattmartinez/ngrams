@@ -73,7 +73,7 @@ python3 scripts/explain_check.py plan.json                 # triage a pasted pla
 | `references/patterns.md` | Index and rewrite patterns, each with when it does and does not apply |
 | `scripts/scan_queries.py`, `scripts/qq_scan/` | The code scanner |
 | `scripts/explain_check.py`, `scripts/qq_plan/` | The plan checker |
-| `evals/` | Test cases for the skill itself; not installed |
+| `scripts/fixtures/` | Real EXPLAIN output used by the checker's tests |
 
 ## Tests
 

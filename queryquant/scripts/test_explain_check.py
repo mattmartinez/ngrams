@@ -10,15 +10,15 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "explain_check.py")
 FIXTURES = os.path.join(HERE, "fixtures")
-EVALS = os.path.join(os.path.dirname(HERE), "evals")
-PG_NESTED_EVAL = os.path.join(EVALS, "pg-nested-loop-misestimate", "files", "plan.json")
-MYSQL_EVAL = os.path.join(EVALS, "mysql-covering-index", "files", "plan.json")
-QDB_EVAL = os.path.join(EVALS, "questdb-designated-timestamp", "files", "plan.txt")
-PROD_DELETE_CONTEXT = os.path.join(EVALS, "prod-delete-explain-analyze", "files", "context.md")
-GENERIC_APP = os.path.join(EVALS, "pg-generic-plan", "files", "plan_app.json")
-GENERIC_PSQL = os.path.join(EVALS, "pg-generic-plan", "files", "plan_psql.json")
-PARTITION_EVAL = os.path.join(EVALS, "pg-partition-pruning", "files", "plan.json")
-PGSS_EVAL = os.path.join(EVALS, "pg-n-plus-one", "files", "pg_stat_statements.txt")
+FIX = os.path.join(HERE, "fixtures")
+PG_NESTED_EVAL = os.path.join(FIX, "pg_nested_loop_misestimate.json")
+MYSQL_EVAL = os.path.join(FIX, "mysql_json_index_scan_filter.json")
+QDB_EVAL = os.path.join(FIX, "questdb_full_scan.txt")
+PROD_DELETE_PLAN = os.path.join(FIX, "pg_delete_estimates.json")
+GENERIC_APP = os.path.join(FIX, "pg_generic_plan_app.json")
+GENERIC_PSQL = os.path.join(FIX, "pg_generic_plan_psql.json")
+PARTITION_EVAL = os.path.join(FIX, "pg_partition_no_pruning.json")
+PGSS_EVAL = os.path.join(FIX, "pg_stat_statements_n_plus_one.txt")
 
 sys.path.insert(0, HERE)
 import explain_check  # noqa: E402  (for node lists, which the CLI does not print)
@@ -178,12 +178,7 @@ Execution Time: 100.000 ms
         self.assertIn("182,864 heap fetches", hf[0]["summary"])
 
     def test_prod_delete_seq_scan_estimate(self):
-        with open(PROD_DELETE_CONTEXT, encoding="utf-8") as fh:
-            block = re.search(r"```json\n(.*?)```", fh.read(), re.S)
-        self.assertIsNotNone(block, "no ```json block in context.md")
-        with tempfile.TemporaryDirectory() as tmp:
-            path = write_tmp(tmp, "prod_delete.json", block.group(1))
-            found = findings(path)
+        found = findings(PROD_DELETE_PLAN)
         got = {f["rule"] for f in found}
         self.assertIn("pg.no-analyze", got)
         seq = [f for f in found if f["rule"] == "pg.seq-scan-filtered"]
