@@ -1,6 +1,6 @@
 ---
 name: queryquant
-description: Diagnose and fix a slow SQL query on PostgreSQL, MySQL/Aurora MySQL, or QuestDB — capture the plan safely, triage it with the bundled checker, rank statistics/index/rewrite fixes, verify, and roll out without locking the table. Use whenever the user shows a slow query, pastes EXPLAIN or a query plan, asks which index to add, mentions a seq scan, full table scan, filesort, nested loop, interval scan, missing or unused index, a SYMBOL index or SAMPLE BY query, a SELECT timing out, or one statement driving database CPU — even if they never say "optimize". Not for finding which statements are slow in logs or metrics, not for deadlocks or lock waits, and not for application-code profiling.
+description: Diagnose and fix a slow SQL query on PostgreSQL, MySQL/Aurora MySQL, or QuestDB — capture the plan safely, triage it with the bundled checker, rank statistics/index/rewrite fixes, verify, and roll out without locking the table. Use whenever the user shows a slow query, pastes EXPLAIN or a query plan, asks which index to add, mentions a seq scan, full table scan, filesort, nested loop, interval scan, missing or unused index, a SYMBOL index or SAMPLE BY query, a SELECT timing out, or one statement driving database CPU — even if they never say "optimize". Also use it when the user pastes pg_stat_statements or performance_schema output and asks why it is slow, including N+1 call patterns. Not for searching logs, dashboards, or monitoring tools to find which statements are slow, not for deadlocks or lock waits, and not for application-code profiling.
 argument-hint: "[path/to/plan.json or paste the query + EXPLAIN output]"
 ---
 
@@ -35,7 +35,7 @@ Prefer a replica or staging with production-like data for the ANALYZE run. ANALY
 
 ## 3. Triage the plan
 
-1. Run the checker. It parses Postgres JSON and plain-text plans (pasted `EXPLAIN ANALYZE` output works), MySQL JSON, MySQL `EXPLAIN ANALYZE` trees, and QuestDB `EXPLAIN` trees, and prints ranked findings: hot nodes by self time, row misestimates, disk sorts, hash batches, heavy nested loops, filtered seq scans, full scans, filesort, unused keys, and (QuestDB) full frame scans and non-JIT filters.
+1. Run the checker. It parses Postgres JSON and plain-text plans (pasted `EXPLAIN ANALYZE` output works), pasted `pg_stat_statements` output, MySQL JSON, MySQL `EXPLAIN ANALYZE` trees, and QuestDB `EXPLAIN` trees, and prints ranked findings: hot nodes by self time, row misestimates, disk sorts, hash batches, heavy nested loops, filtered seq scans, full scans, filesort, unused keys, and (QuestDB) full frame scans and non-JIT filters.
 
    ```bash
    python3 ${CLAUDE_SKILL_DIR}/scripts/explain_check.py plan.json          # ranked findings
@@ -49,7 +49,10 @@ Prefer a replica or staging with production-like data for the ANALYZE run. ANALY
    - `ORDER BY` with no matching index → sort spills to disk or filesort;
    - MySQL `filtered` under 10% → the chosen index is not the selective one;
    - index-only scan with heap fetches → table needs vacuum, not a new index;
-   - QuestDB `Frame forward scan` with no `Interval` scan → the time predicate is not on the designated timestamp.
+   - QuestDB `Frame forward scan` with no `Interval` scan → the time predicate is not on the designated timestamp;
+   - `pg.generic-plan` → a prepared statement switched to a generic plan; fast in psql, slow from the app. Compare with a custom plan before touching statistics;
+   - `pg.no-partition-pruning` → a function on the partition key stops pruning; rewrite the predicate, do not add indexes;
+   - `pg.n-plus-one` → the plan is fine and the call count is the problem; batch the lookups, no index.
 3. Classify the cause: **statistics**, **index** (missing, wrong column order, not covering), **query shape** (non-sargable predicate, `OR`, `NOT IN`, `DISTINCT` hiding fan-out, `OFFSET`), **resources** (`work_mem`, `sort_buffer_size`), or **data design** (partitioning, materialization). Open the engine reference for the node glossary and catalog queries: `references/postgres.md`, `references/mysql.md`, or `references/questdb.md`.
 
 ## 4. Propose fixes, cheapest first
@@ -62,7 +65,7 @@ Order by cost to ship and risk, and say why a cheaper tier is not enough before 
 4. **Parameters** — session-scoped first (`SET LOCAL work_mem`), with the plan diff as evidence. Never a global change from one query.
 5. **Schema** — partitioning, materialized views, denormalization. Last, because it changes every query on the table.
 
-For each candidate state: the node it changes and the expected new plan shape, the cost, the risk, and how it will be verified. Do not propose planner toggles (`enable_seqscan`, `optimizer_switch`) for production, "filter in a subquery" (the planner already pushes predicates down), or `DISTINCT` to hide a join fan-out.
+For each candidate, work out the node it changes and the expected new plan shape, the cost, the risk, and how to verify it. The report shows only the winner; the others get one line each in the evidence block. Do not propose planner toggles (`enable_seqscan`, `optimizer_switch`) for production, "filter in a subquery" (the planner already pushes predicates down), or `DISTINCT` to hide a join fan-out.
 
 ## 5. Verify
 
@@ -83,19 +86,39 @@ Large index builds on Aurora/RDS read replicas add replication lag; schedule the
 
 ## Report format
 
-Use this structure so the user can paste it into a ticket:
+The reader is a busy engineer pasting this into a ticket. Write the ticket card below and nothing else: plain words, short sentences, the answer before the reasoning. Keep the five sections under about 250 words, not counting SQL blocks and the evidence block.
+
+- Say what the database is doing in everyday terms ("reads the whole table newest-first and checks each row"), not in plan field names. If a field name or number from the plan is needed, say what it means in the same sentence.
+- Give one recommended fix. Other options go in the evidence block, one line each with why they lost.
+- Put every number from the plan, the checker's findings, and the reasoning in the collapsed evidence block. The five sections hold only what the reader acts on.
+- When the plan came from staging or a sample and the user's numbers are from prod, say which is which.
+- If the user asked for something unsafe, such as `EXPLAIN ANALYZE` of a `DELETE` on prod, say so in the first sentence of What's wrong and give the safe command in Check it worked.
 
 ```
-## Query
-<statement, engine + version, environment, calls/min, current latency>
-## Diagnosis
-<top checker findings with numbers; cause class; the chain>
-## Fix (ranked)
-1. <DDL or rewrite> — changes <node> from <X> to <Y>; cost <write/disk/build>; risk <...>
-## Verification
-<before/after: execution time, buffers, hot node; other parameter values tried>
-## Rollout
-<exact commands with lock_timeout / CONCURRENTLY / ALGORITHM=INPLACE; rollback command>
+## What's wrong
+<two or three sentences: what the database does today and why that is slow>
+
+## Fix
+<one sentence: what to change and whether it is safe during the day>
+<one block, ready to run. DDL carries a lock timeout and CONCURRENTLY or ALGORITHM=INPLACE, LOCK=NONE, then ANALYZE. A query rewrite shows the new query.>
+
+## Cost
+<one or two sentences: write overhead in the user's own rates, disk, build time, and any side effect such as dead rows to vacuum or replica lag>
+
+## Check it worked
+<one or two sentences: re-run the same capture and compare execution time and rows or buffers read; name the node that should change>
+
+## Undo
+<the rollback: one SQL block for DDL, or "revert the deploy" for a query change>
+
+<details><summary>Evidence</summary>
+
+- Checker findings, with their rule names and numbers
+- The chain from cause to slowness, naming the node that costs the most and its share of the runtime
+- Safety notes the reader could get wrong, such as what a rolled-back statement still does
+- Other options considered, one line each, and why they were not chosen
+- Anything not verified
+</details>
 ```
 
 ## Files

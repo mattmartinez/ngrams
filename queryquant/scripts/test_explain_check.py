@@ -15,6 +15,10 @@ PG_NESTED_EVAL = os.path.join(EVALS, "pg-nested-loop-misestimate", "files", "pla
 MYSQL_EVAL = os.path.join(EVALS, "mysql-covering-index", "files", "plan.json")
 QDB_EVAL = os.path.join(EVALS, "questdb-designated-timestamp", "files", "plan.txt")
 PROD_DELETE_CONTEXT = os.path.join(EVALS, "prod-delete-explain-analyze", "files", "context.md")
+GENERIC_APP = os.path.join(EVALS, "pg-generic-plan", "files", "plan_app.json")
+GENERIC_PSQL = os.path.join(EVALS, "pg-generic-plan", "files", "plan_psql.json")
+PARTITION_EVAL = os.path.join(EVALS, "pg-partition-pruning", "files", "plan.json")
+PGSS_EVAL = os.path.join(EVALS, "pg-n-plus-one", "files", "pg_stat_statements.txt")
 
 sys.path.insert(0, HERE)
 import explain_check  # noqa: E402  (for node lists, which the CLI does not print)
@@ -84,9 +88,18 @@ class ExplainCheckTest(unittest.TestCase):
                 self.assertEqual(mis[0]["evidence"]["actual_rows"], 587)
                 self.assertLessEqual(mis[0]["evidence"]["est_ratio"], 0.01)
                 self.assertIn("propagates to Nested Loop", mis[0]["summary"])
-                self.assert_rules(plan, ["pg.hot-node"])
-                # Top-N heapsort stays in memory; the inner side runs 587 loops, under the 1,000 threshold.
-                self.assert_absent(plan, ["pg.sort-disk", "pg.nested-loop-heavy"])
+                self.assert_rules(plan, ["pg.hot-node", "pg.nested-loop-heavy"])
+                self.assert_absent(plan, ["pg.sort-disk"])  # top-N heapsort stays in memory
+
+    def test_pg_nested_loop_runtime_share(self):
+        # 587 inner loops is under 1,000, but the inner side holds over 20% of the runtime.
+        nl = of_rule(PG_NESTED_EVAL, "pg.nested-loop-heavy")
+        self.assertEqual(len(nl), 1, nl)
+        self.assertEqual(nl[0]["severity"], "medium")
+        self.assertEqual(nl[0]["evidence"]["inner_loops"], 587)
+        self.assertGreaterEqual(nl[0]["evidence"]["inner_pct"], 20)
+        self.assertLess(nl[0]["evidence"]["inner_pct"], 50)
+        self.assertIn("% of runtime", nl[0]["summary"])
 
     def test_pg_text_analyze_matches_json(self):
         self.assertEqual(rules("pg_text_analyze.txt"), rules("pg_nested_loop_misestimate.json"))
@@ -128,6 +141,36 @@ class ExplainCheckTest(unittest.TestCase):
         self.assert_absent("pg_sort_disk_hash_batches.json", ["pg.heap-fetches"])
         hb = of_rule("pg_sort_disk_hash_batches.json", "pg.hash-batches")
         self.assertEqual([f["evidence"]["hash_batches"] for f in hb], [64], hb)
+
+    def test_pg_text_lossy_heap_blocks(self):
+        plan = """\
+Sort  (cost=210.00..210.10 rows=10 width=8) (actual time=99.000..100.000 rows=10 loops=1)
+  Sort Key: id
+  Sort Method: quicksort  Memory: 25kB
+  ->  Bitmap Heap Scan on events e  (cost=10.00..200.00 rows=10 width=8) (actual time=1.000..5.000 rows=10 loops=1)
+        Recheck Cond: (kind = 3)
+        Rows Removed by Index Recheck: 5000
+        Heap Blocks: {blocks}
+        ->  Bitmap Index Scan on idx_events_kind  (cost=0.00..10.00 rows=10 width=0) (actual time=0.500..0.500 rows=5010 loops=1)
+              Index Cond: (kind = 3)
+Planning:
+  Buffers: shared hit=12
+Planning Time: 0.100 ms
+Execution Time: 100.000 ms
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            lossy = of_rule(write_tmp(tmp, "lossy.txt", plan.format(blocks="exact=10 lossy=500")), "pg.index-recheck")
+            exact = of_rule(write_tmp(tmp, "exact.txt", plan.format(blocks="exact=510")), "pg.index-recheck")
+            verbose = subprocess.run([sys.executable, "-I", SCRIPT, os.path.join(tmp, "lossy.txt"), "--verbose"],
+                                     capture_output=True, text=True, timeout=30)
+        # The scan holds under 20% of the runtime, so only the lossy blocks lift it to medium.
+        self.assertEqual([f["severity"] for f in lossy], ["medium"], lossy)
+        self.assertIn("lossy bitmap (work_mem)", lossy[0]["summary"])
+        self.assertEqual((lossy[0]["evidence"]["lossy_heap_blocks"], lossy[0]["evidence"]["exact_heap_blocks"]),
+                         (500, 10))
+        self.assertEqual([f["severity"] for f in exact], ["low"], exact)
+        self.assertNotIn("lossy", exact[0]["summary"])
+        self.assertIn("footer line used: 'Buffers: shared hit=12'", verbose.stderr)
 
     def test_pg_heap_fetches(self):
         hf = of_rule("pg_heap_fetches.json", "pg.heap-fetches")
@@ -175,6 +218,47 @@ class ExplainCheckTest(unittest.TestCase):
                              [{"Plan": limit, "Planning Time": 0.1, "Triggers": [], "Execution Time": 5.0}])
             mis = [f for f in findings(path) if f["rule"] == "pg.row-misestimate"]
         self.assertEqual([f["node"]["label"] for f in mis], ["Seq Scan on events e"], mis)
+
+    def test_pg_generic_plan(self):
+        found = findings(GENERIC_APP)
+        gen = [f for f in found if f["rule"] == "pg.generic-plan"]
+        self.assertEqual([(f["severity"], f["node"]["path"]) for f in gen], [("high", "0.0.0")], gen)
+        self.assertIn("misestimates this one 4,131x", gen[0]["summary"])
+        self.assertEqual(gen[0]["evidence"]["conditions"], {"Index Cond": "(tenant_id = $1)"})
+        mis = [f for f in found if f["rule"] == "pg.row-misestimate"]
+        self.assertEqual([f["node"]["path"] for f in mis], ["0.0.0"], mis)  # still fires on the same node
+        self.assertNotIn("Stale", mis[0]["hint"])
+        self.assertIn("see pg.generic-plan", mis[0]["hint"])
+        # The custom plan (literal tenant_id, no $n) is not a generic plan.
+        self.assertNotIn("pg.generic-plan", rules(GENERIC_PSQL))
+
+    def test_pg_no_partition_pruning(self):
+        found = findings(PARTITION_EVAL)
+        prune = [f for f in found if f["rule"] == "pg.no-partition-pruning"]
+        self.assertEqual(len(prune), 1, prune)
+        self.assertEqual(prune[0]["severity"], "high")
+        self.assertEqual(prune[0]["node"]["type"], "Append")
+        ev = prune[0]["evidence"]
+        self.assertEqual((ev["parent"], ev["partitions_scanned"], ev["partitions_with_rows"]), ("events_p", 14, 1))
+        self.assertIn("date_trunc(", ev["filter"])
+        self.assertIn("13 partition scans folded into pg.no-partition-pruning", prune[0]["summary"])
+        self.assertNotIn("pg.seq-scan-filtered", {f["rule"] for f in found})
+
+    def test_pg_statements_n_plus_one(self):
+        with open(PGSS_EVAL, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertEqual(explain_check.detect(text, "auto")[0], "pg-statements")
+        renamed = text.replace(" mean_ms |", " mean_exec_time |").replace(" total_ms |", " total_exec_time |")
+        with tempfile.TemporaryDirectory() as tmp:
+            for plan in (PGSS_EVAL, write_tmp(tmp, "pgss_exec_time.txt", renamed)):
+                with self.subTest(plan=os.path.basename(plan)):
+                    proc = run(plan)
+                    self.assertEqual(proc.returncode, 0, proc.stderr)
+                    found = json.loads(proc.stdout)
+                    self.assertEqual([(f["rule"], f["severity"], f["node"]["path"]) for f in found],
+                                     [("pg.n-plus-one", "high", "0")], found)
+                    self.assertEqual(found[0]["summary"], "5,000 calls at 0.10 ms each = 476 ms total; one lookup "
+                                                          "per parent row (N+1)")
 
     def test_stdin_matches_file(self):
         via_file = run("pg_nested_loop_misestimate.json")
@@ -237,8 +321,44 @@ class ExplainCheckTest(unittest.TestCase):
         self.assertIn("my.hot-node", got)
         self.assertEqual([f["node"]["label"] for f in found if f["rule"] == "my.full-scan"], ["Table scan on c"])
         self.assertEqual([f["severity"] for f in found if f["rule"] == "my.filesort"], ["medium"])  # 30,000 rows
-        # Estimates are close in the real plan; the inner lookup runs 750 loops, under 1,000.
-        self.assertFalse({"my.row-misestimate", "my.nested-loop-heavy"} & got, sorted(got))
+        self.assertNotIn("my.row-misestimate", got)  # estimates are close in the real plan
+        # 750 inner loops is under 1,000, but the inner lookup holds over 50% of the runtime.
+        self.assertEqual([f["severity"] for f in found if f["rule"] == "my.nested-loop-heavy"], ["high"])
+
+    def test_mysql_tree_index_scan_filter(self):
+        plan = """\
+-> Limit: 10 row(s)  (cost=0.43 rows=10){a1}
+    -> Filter: (o.status = 'refunded')  (cost=0.43 rows=10){a2}
+        -> Index scan on o using idx_orders_created{rev}  (cost=0.43 rows=20000){a3}
+"""
+        analyzed = {"a1": " (actual time=250..251 rows=10 loops=1)", "a2": " (actual time=250..251 rows={kept} loops=1)",
+                    "a3": " (actual time=0.05..230 rows=400000 loops=1)"}
+        cases = {"analyze": dict(analyzed, a2=analyzed["a2"].format(kept=10), rev=""),
+                 "analyze_dense": dict(analyzed, a2=analyzed["a2"].format(kept=40000), rev=""),
+                 "estimates_reverse": {"a1": "", "a2": "", "a3": "", "rev": " (reverse)"},
+                 "estimates_forward": {"a1": "", "a2": "", "a3": "", "rev": ""}}
+        got = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, parts in cases.items():
+                got[name] = findings(write_tmp(tmp, f"{name}.txt", plan.format(**parts)))
+
+        def isf(name):
+            return [f for f in got[name] if f["rule"] == "my.index-scan-filter"]
+
+        hit = isf("analyze")
+        self.assertEqual(len(hit), 1, got["analyze"])
+        self.assertEqual(hit[0]["severity"], "medium")
+        self.assertEqual(hit[0]["node"]["index"], "idx_orders_created")
+        self.assertEqual((hit[0]["evidence"]["rows_read"], hit[0]["evidence"]["rows_kept"]), (400000, 10))
+        self.assertIs(hit[0]["evidence"]["estimated"], False)
+        self.assertIn("ordered index walk on idx_orders_created filtering 0.00%", hit[0]["summary"])
+        self.assertNotIn("my.index-scan-full", {f["rule"] for f in got["analyze"]})
+        self.assertEqual(isf("analyze_dense"), [])  # keeps 10%, over the 5% line
+        est = isf("estimates_reverse")
+        self.assertEqual(len(est), 1, got["estimates_reverse"])
+        self.assertIs(est[0]["evidence"]["estimated"], True)
+        self.assertIs(est[0]["evidence"]["backward_index_scan"], True)
+        self.assertEqual(isf("estimates_forward"), [])
 
     def test_wrong_format_exits_2(self):
         proc = run("mysql_tree_analyze.txt", "--format", "pg-json")

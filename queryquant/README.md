@@ -37,13 +37,15 @@ It works best with four things. It asks for any that are missing:
 
 ## What you get
 
-A report you can paste into a ticket:
+A short ticket card in plain language, about 250 words plus the SQL:
 
-1. **Query**: the statement, engine, environment, call rate, and current latency.
-2. **Diagnosis**: the checker's top findings with numbers, the cause, and the chain from cause to slowness.
-3. **Fix (ranked)**: statistics first, then indexes, then query rewrites, then settings, then schema changes. Each fix says which plan node it changes, what it costs on the write side, and the risk.
-4. **Verification**: how to prove the fix worked, using the same `EXPLAIN` and at least one other parameter value.
-5. **Rollout**: exact commands with lock timeouts and online DDL, plus the rollback command.
+1. **What's wrong**: what the database is doing today, in everyday terms.
+2. **Fix**: one recommended change and whether it is safe during the day, as one ready-to-run SQL block.
+3. **Cost**: the write overhead in your own traffic numbers, plus disk and build time.
+4. **Check it worked**: what to re-run and what should change.
+5. **Undo**: the rollback command.
+
+The plan numbers, the checker's findings, the reasoning, and the options that lost are in a collapsed **Evidence** block at the end.
 
 ## Safety defaults
 
@@ -96,7 +98,8 @@ The full rule list is in the script's docstring.
 | `references/mysql.md` | `EXPLAIN` JSON and tree glossary, `performance_schema` queries, online DDL |
 | `references/questdb.md` | Plan nodes, designated timestamp and partitions, `SYMBOL` indexes, ingestion side effects |
 | `references/patterns.md` | Index and rewrite patterns, each with when it does and does not apply |
-| `scripts/explain_check.py` | The plan checker |
+| `scripts/explain_check.py` | The plan checker's command line |
+| `scripts/qq_plan/` | The checker's parsers and rules, one module per engine |
 | `scripts/fixtures/` | Plans captured from PostgreSQL 16, MySQL 8.0, and QuestDB 10.1 |
 | `evals/` | Test cases for the skill itself; not installed |
 
