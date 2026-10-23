@@ -1,0 +1,31 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Bitmap Heap Scan",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Relation Name": "events",
+      "Alias": "events",
+      "Startup Cost": 1832.36,
+      "Total Cost": 16674.70,
+      "Plan Rows": 12713,
+      "Plan Width": 62,
+      "Recheck Cond": "(kind = 'login'::text)",
+      "Filter": "(created_at > (now() - '7 days'::interval))",
+      "Plans": [
+        {
+          "Node Type": "Bitmap Index Scan",
+          "Parent Relationship": "Outer",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Index Name": "idx_events_kind",
+          "Startup Cost": 0.00,
+          "Total Cost": 1829.18,
+          "Plan Rows": 167567,
+          "Plan Width": 0,
+          "Index Cond": "(kind = 'login'::text)"
+        }
+      ]
+    }
+  }
+]

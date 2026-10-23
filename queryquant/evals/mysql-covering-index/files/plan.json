@@ -1,0 +1,41 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost_info": {
+      "query_cost": "31662.95"
+    },
+    "ordering_operation": {
+      "using_filesort": false,
+      "table": {
+        "table_name": "orders",
+        "access_type": "index",
+        "possible_keys": [
+          "idx_orders_customer"
+        ],
+        "key": "idx_orders_created",
+        "used_key_parts": [
+          "created_at"
+        ],
+        "key_length": "8",
+        "rows_examined_per_scan": 397,
+        "rows_produced_per_join": 10034,
+        "filtered": "0.50",
+        "backward_index_scan": true,
+        "cost_info": {
+          "read_cost": "21628.35",
+          "eval_cost": "1003.46",
+          "prefix_cost": "31662.95",
+          "data_read_per_join": "1019K"
+        },
+        "used_columns": [
+          "id",
+          "customer_id",
+          "status",
+          "total",
+          "created_at"
+        ],
+        "attached_condition": "((`qq`.`orders`.`status` = 'open') and (`qq`.`orders`.`customer_id` = 88213))"
+      }
+    }
+  }
+}

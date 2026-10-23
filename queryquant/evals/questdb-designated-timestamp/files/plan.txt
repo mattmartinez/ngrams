@@ -1,0 +1,11 @@
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ SelectedRecord
+     Async JIT Filter workers: 4
+       limit: 500
+       filter: (ingested_at>=2026-10-20T00:00:00.000000Z and device='QOWTVBQNHS')
+         PageFrame
+             Row backward scan
+             Frame backward scan on: readings
+(7 rows)
+

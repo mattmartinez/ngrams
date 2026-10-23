@@ -1,0 +1,2 @@
+Hey, can you look at why the dashboard query is slow? It started after Tuesday's deploy.
+{ "note": "this is not a plan",

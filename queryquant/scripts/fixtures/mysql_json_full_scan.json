@@ -1,0 +1,73 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost_info": {
+      "query_cost": "368472.69"
+    },
+    "ordering_operation": {
+      "using_temporary_table": true,
+      "using_filesort": true,
+      "cost_info": {
+        "sort_cost": "187148.87"
+      },
+      "nested_loop": [
+        {
+          "table": {
+            "table_name": "c",
+            "access_type": "ALL",
+            "possible_keys": [
+              "PRIMARY"
+            ],
+            "rows_examined_per_scan": 48720,
+            "rows_produced_per_join": 4872,
+            "filtered": "10.00",
+            "cost_info": {
+              "read_cost": "4441.05",
+              "eval_cost": "487.20",
+              "prefix_cost": "4928.25",
+              "data_read_per_join": "1M"
+            },
+            "used_columns": [
+              "id",
+              "country",
+              "name"
+            ],
+            "attached_condition": "(`qq`.`c`.`country` = 'NZ')"
+          }
+        },
+        {
+          "table": {
+            "table_name": "o",
+            "access_type": "ref",
+            "possible_keys": [
+              "idx_orders_customer"
+            ],
+            "key": "idx_orders_customer",
+            "used_key_parts": [
+              "customer_id"
+            ],
+            "key_length": "8",
+            "ref": [
+              "qq.c.id"
+            ],
+            "rows_examined_per_scan": 38,
+            "rows_produced_per_join": 187148,
+            "filtered": "100.00",
+            "cost_info": {
+              "read_cost": "157680.68",
+              "eval_cost": "18714.89",
+              "prefix_cost": "181323.82",
+              "data_read_per_join": "18M"
+            },
+            "used_columns": [
+              "id",
+              "customer_id",
+              "total",
+              "created_at"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

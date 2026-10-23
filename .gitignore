@@ -27,3 +27,6 @@ vendor/
 coverage/
 .cache/
 tmp/
+
+# skill-creator eval workspaces
+*-workspace/

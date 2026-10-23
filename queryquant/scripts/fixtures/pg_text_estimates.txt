@@ -1,0 +1,9 @@
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Bitmap Heap Scan on events  (cost=1832.36..16674.70 rows=12713 width=62)
+   Recheck Cond: (kind = 'login'::text)
+   Filter: (created_at > (now() - '7 days'::interval))
+   ->  Bitmap Index Scan on idx_events_kind  (cost=0.00..1829.18 rows=167567 width=0)
+         Index Cond: (kind = 'login'::text)
+(5 rows)
+

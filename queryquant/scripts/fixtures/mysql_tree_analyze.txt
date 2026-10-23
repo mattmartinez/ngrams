@@ -1,0 +1,7 @@
+-> Sort: o.created_at DESC  (actual time=175..178 rows=30000 loops=1)
+    -> Stream results  (cost=118890 rows=187149) (actual time=0.386..161 rows=30000 loops=1)
+        -> Nested loop inner join  (cost=118890 rows=187149) (actual time=0.381..150 rows=30000 loops=1)
+            -> Filter: (c.country = 'NZ')  (cost=4928 rows=4872) (actual time=0.179..20.7 rows=750 loops=1)
+                -> Table scan on c  (cost=4928 rows=48720) (actual time=0.158..16.9 rows=48751 loops=1)
+            -> Index lookup on o using idx_orders_customer (customer_id=c.id)  (cost=19.6 rows=38.4) (actual time=0.164..0.17 rows=40 loops=750)
+

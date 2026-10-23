@@ -1,0 +1,32 @@
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2284.31..2284.41 rows=40 width=22) (actual time=24.052..24.072 rows=100 loops=1)
+   Buffers: shared hit=15765
+   ->  Sort  (cost=2284.31..2284.41 rows=40 width=22) (actual time=24.051..24.060 rows=100 loops=1)
+         Sort Key: o.created_at DESC
+         Sort Method: top-N heapsort  Memory: 37kB
+         Buffers: shared hit=15765
+         ->  Nested Loop  (cost=454.39..2283.25 rows=40 width=22) (actual time=6.247..21.709 rows=13472 loops=1)
+               Buffers: shared hit=15762
+               ->  Bitmap Heap Scan on users u  (cost=449.79..2101.78 rows=2 width=8) (actual time=6.209..7.657 rows=587 loops=1)
+                     Recheck Cond: (region = 'us-east'::text)
+                     Filter: (signup_source = 'referral'::text)
+                     Rows Removed by Filter: 40576
+                     Heap Blocks: exact=1033
+                     Buffers: shared hit=1067
+                     ->  Bitmap Index Scan on idx_users_region  (cost=0.00..449.79 rows=41266 width=0) (actual time=1.125..1.125 rows=41163 loops=1)
+                           Index Cond: (region = 'us-east'::text)
+                           Buffers: shared hit=34
+               ->  Bitmap Heap Scan on orders o  (cost=4.60..90.51 rows=22 width=30) (actual time=0.005..0.019 rows=23 loops=587)
+                     Recheck Cond: (user_id = u.id)
+                     Heap Blocks: exact=12934
+                     Buffers: shared hit=14695
+                     ->  Bitmap Index Scan on idx_orders_user_id  (cost=0.00..4.59 rows=22 width=0) (actual time=0.003..0.003 rows=23 loops=587)
+                           Index Cond: (user_id = u.id)
+                           Buffers: shared hit=1761
+ Planning:
+   Buffers: shared hit=303
+ Planning Time: 0.888 ms
+ Execution Time: 24.169 ms
+(28 rows)
+

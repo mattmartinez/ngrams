@@ -20,7 +20,7 @@ for skill in "$SCRIPT_DIR"/*/; do
   mkdir -p "$TARGET/$name"
   rsync -ai --delete --delete-excluded \
     --exclude=.bg-shell/ --exclude=__pycache__/ --exclude=.DS_Store \
-    --exclude=.gitignore --exclude=.python-version \
+    --exclude=.gitignore --exclude=.python-version --exclude=evals/ \
     "$skill" "$TARGET/$name/"
 done
 

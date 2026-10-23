@@ -1,0 +1,12 @@
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ SelectedRecord
+     Async JIT Filter workers: 4
+       limit: 500
+       filter: device='QOWTVBQNHS'
+         PageFrame
+             Row backward scan
+             Interval backward scan on: readings
+               intervals: [("2026-10-20T00:00:00.000000Z","MAX")]
+(8 rows)
+
