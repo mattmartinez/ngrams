@@ -1,110 +1,83 @@
 # queryquant
 
-Diagnose and fix a slow SQL query on PostgreSQL, MySQL (including Aurora MySQL), or QuestDB. The skill reads the query plan, finds the one node that costs the most, ranks the fixes from cheapest to most expensive, and writes the rollout so nothing locks the table.
+Review the SQL queries in a codebase for performance problems, then dig into any one of them. You point it at a service or repo; it lists the problems worst first, with file and line; you pick one and get a fix you can paste into a ticket.
+
+It is built for Java services that use JDBI SQL Objects and Liquibase changesets on Aurora MySQL. The deep dive also handles PostgreSQL and QuestDB plans. It never runs SQL against your database: when it needs a number from the database, it gives you the command to run and waits for the output.
 
 ## Usage
 
 ```
-/queryquant <the query, the plan, or a path to a saved plan>
+/queryquant                          # review the repo you're in
+/queryquant services/billing        # review one service
+/queryquant the database feels slow  # also start from the database's own slowest-statements list
 ```
 
-You can also just describe the problem. The skill triggers on phrases like "this query is slow", "which index should I add", a pasted `EXPLAIN`, a seq scan, a filesort, or a QuestDB `SAMPLE BY` that takes too long.
-
-It works best with four things. It asks for any that are missing:
-
-- the statement, with the real parameter values
-- the engine and version (`SELECT version();`)
-- the table DDL, existing indexes, and row counts
-- the plan, saved to a file
-
-## Examples
+Then:
 
 ```
-/queryquant the account dashboard query takes 3 s, plan is in plan.json and the DDL is in schema.sql
-```
-
-```
-/queryquant Aurora MySQL, open-orders query is slow for small merchants. Which index, and is it safe to add during the day?
-```
-
-```
-/queryquant our nightly DELETE on prod takes 40 minutes and causes lock waits
-```
-
-```
-/queryquant questdb: recent readings for one device take 40 s. Should I index the device column?
+look at 2
 ```
 
 ## What you get
 
-A short ticket card in plain language, about 250 words plus the SQL:
+**A review**, as a short numbered list in chat, worst first:
 
-1. **What's wrong**: what the database is doing today, in everyday terms.
-2. **Fix**: one recommended change and whether it is safe during the day, as one ready-to-run SQL block.
-3. **Cost**: the write overhead in your own traffic numbers, plus disk and build time.
-4. **Check it worked**: what to re-run and what should change.
-5. **Undo**: the rollback command.
+```
+1. billing · InvoiceRepo.java:63 · listing invoices loads each invoice's lines one at a time, then one payments query per line · nested N+1 on a read path · from code
+2. billing · CustomerRepo.java:172 · getCustomers() reads every customer, then 3 queries per customer · nested N+1 on an unbounded read · from code
++ 9 more one-row lookups while saving an invoice — minor unless saves carry 100+ items
+```
 
-The plan numbers, the checker's findings, the reasoning, and the options that lost are in a collapsed **Evidence** block at the end.
+Problems that hurt at any table size come first (N+1 loops, catch-all filters, unbounded reads, unchunked batches, offset paging), then missing indexes, which are marked "needs table size". Each line says whether it comes from the code or is confirmed by the database.
 
-## Safety defaults
+**A deep dive** on the one you pick, as a short card:
 
-The skill assumes production is read-only unless you say otherwise.
+1. **What's wrong**: what the code and database do today, in everyday words.
+2. **Fix**: one recommended change, ready to paste.
+3. **Cost**: write overhead, disk, build time, side effects.
+4. **Check it worked**: the command to run before and after, and what should change.
+5. **Undo**: the rollback.
 
-- `EXPLAIN ANALYZE` runs the statement. For an `INSERT`, `UPDATE`, or `DELETE` the skill gives you plain `EXPLAIN`, or wraps the statement in `BEGIN` … `ROLLBACK` for a replica or staging copy.
-- Every PostgreSQL index uses `CREATE INDEX CONCURRENTLY` with `lock_timeout`, plus the cleanup command if the build fails.
-- Every MySQL index uses `ALGORITHM=INPLACE, LOCK=NONE` with `lock_wait_timeout`.
-- It does not recommend planner toggles such as `enable_nestloop = off` for production.
+The evidence follows at the end.
 
-## The plan checker
+## Safety
 
-`scripts/explain_check.py` reads a saved plan and prints ranked findings. It never connects to a database and needs only Python 3.
+- It never connects to a database. You run every command it gives you.
+- `EXPLAIN ANALYZE` runs the statement, so for writes it gives you plain `EXPLAIN`, or wraps the statement in `BEGIN` … `ROLLBACK` for a staging copy.
+- Index changes use online DDL with a lock timeout: `ALGORITHM=INPLACE, LOCK=NONE` on MySQL, `CREATE INDEX CONCURRENTLY` on PostgreSQL.
+
+## Configuration
+
+An optional `.queryquant.json` at the root of the scanned path holds your conventions: paths to ignore, findings you accept and why, a tenant column that must lead every index, and small tables. See `references/scanner.md`.
+
+## The scripts
+
+Both read files only and need just Python 3.9 or later.
 
 ```bash
-python3 scripts/explain_check.py plan.json            # ranked findings
-python3 scripts/explain_check.py plan.json --verbose  # also logs every node and rule to stderr
-python3 scripts/explain_check.py plan.json --json     # machine-readable
-psql -XAtc "EXPLAIN (FORMAT JSON) SELECT ..." | python3 scripts/explain_check.py -
+python3 scripts/scan_queries.py <path> --top 10            # review a service or repo
+python3 scripts/scan_queries.py <path> --json scan.json    # every statement, table, index, and finding
+python3 scripts/explain_check.py plan.json                 # triage a pasted plan
 ```
 
-It detects the format on its own:
-
-| Engine | Formats |
-|---|---|
-| PostgreSQL | `EXPLAIN (FORMAT JSON)`, plain-text `EXPLAIN`, with or without `ANALYZE` and `BUFFERS`, with or without the psql table wrapper |
-| MySQL | `EXPLAIN FORMAT=JSON`, `EXPLAIN ANALYZE` tree output |
-| QuestDB | `EXPLAIN` text, with or without the psql wrapper |
-
-Example output on a MySQL plan:
-
-```
-plan: mysql-json (estimates only)  nodes: 3  query_cost: 31,663.0
-MEDIUM my.index-scan-filter     table orders (index via idx_orders_created) [path query_block.ordering_operation.table]
-       ordered index walk on idx_orders_created filtering 0.50% (397 rows/scan is a LIMIT-scaled estimate); worst case reads the whole index
-       hint: The optimizer walks the ORDER BY index and filters; fast only when matches are dense near the start. A composite index with the equality columns first and the ORDER BY column last lets the LIMIT stop after N entries for every value.
-LOW    my.no-analyze            (whole plan)
-       Estimates only. Capture EXPLAIN ANALYZE (FORMAT=TREE) when it is safe to execute: it runs the statement.
-       hint: Without actual rows and times, hot-node and misestimate rules cannot run.
-```
-
-The full rule list is in the script's docstring.
+`explain_check.py` reads PostgreSQL `EXPLAIN` (JSON or text), pasted `pg_stat_statements` output, MySQL `EXPLAIN FORMAT=JSON` and `EXPLAIN ANALYZE` trees, and QuestDB `EXPLAIN`.
 
 ## Files
 
 | Path | Contents |
 |---|---|
 | `SKILL.md` | The procedure the skill follows |
-| `references/postgres.md` | Plan node glossary, catalog queries, lock-safe DDL |
-| `references/mysql.md` | `EXPLAIN` JSON and tree glossary, `performance_schema` queries, online DDL |
-| `references/questdb.md` | Plan nodes, designated timestamp and partitions, `SYMBOL` indexes, ingestion side effects |
+| `references/scanner.md` | What each scanner rule means, its blind spots, and the config file |
+| `references/deep-dive.md` | The one-query procedure and the card |
+| `references/mysql.md`, `postgres.md`, `questdb.md` | Engine glossaries, stats queries, lock-safe DDL |
 | `references/patterns.md` | Index and rewrite patterns, each with when it does and does not apply |
-| `scripts/explain_check.py` | The plan checker's command line |
-| `scripts/qq_plan/` | The checker's parsers and rules, one module per engine |
-| `scripts/fixtures/` | Plans captured from PostgreSQL 16, MySQL 8.0, and QuestDB 10.1 |
+| `scripts/scan_queries.py`, `scripts/qq_scan/` | The code scanner |
+| `scripts/explain_check.py`, `scripts/qq_plan/` | The plan checker |
 | `evals/` | Test cases for the skill itself; not installed |
 
 ## Tests
 
 ```bash
+python3 -I scripts/test_scan_queries.py
 python3 -I scripts/test_explain_check.py
 ```

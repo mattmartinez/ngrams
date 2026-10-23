@@ -1,130 +1,50 @@
 ---
 name: queryquant
-description: Diagnose and fix a slow SQL query on PostgreSQL, MySQL/Aurora MySQL, or QuestDB — capture the plan safely, triage it with the bundled checker, rank statistics/index/rewrite fixes, verify, and roll out without locking the table. Use whenever the user shows a slow query, pastes EXPLAIN or a query plan, asks which index to add, mentions a seq scan, full table scan, filesort, nested loop, interval scan, missing or unused index, a SYMBOL index or SAMPLE BY query, a SELECT timing out, or one statement driving database CPU — even if they never say "optimize". Also use it when the user pastes pg_stat_statements or performance_schema output and asks why it is slow, including N+1 call patterns. Not for searching logs, dashboards, or monitoring tools to find which statements are slow, not for deadlocks or lock waits, and not for application-code profiling.
-argument-hint: "[path/to/plan.json or paste the query + EXPLAIN output]"
+description: Review the SQL queries in a codebase for performance problems, then dig into any one of them. Scans a service or repo (Java with JDBI SQL Objects and Liquibase changesets first; Aurora MySQL first, PostgreSQL and QuestDB in the deep dive), lists N+1 loops, missing indexes, unbounded reads, catch-all filters, offset paging and unchunked batches ranked worst first with file and line, and on request turns one finding into a fix with an EXPLAIN the user runs. Use whenever the user suspects the database is slow because of queries, wants to optimize or audit queries, asks "review the queries in this service", asks which index a query needs, pastes an EXPLAIN or query plan, or pastes pg_stat_statements or performance_schema output, even if they never say "optimize". Not for searching logs, dashboards, or monitoring tools for slow statements, not for deadlocks or lock waits, and not for profiling application code that is not database access.
+argument-hint: "[path to a service or repo — default: the current repo] [optional: 'the database feels slow']"
 ---
 
 # queryquant
 
-Slow queries are almost always one dominant cause: a bad row estimate, a missing or wrong index, a sort or hash that spills, or a query shape the planner cannot use an index for. The job is to find that cause from the plan, prove it with numbers, and ship the cheapest fix that does not hurt writes or lock the table. Textbook rules ("avoid SELECT *") come last; evidence from the plan comes first.
+The user suspects queries are making the database slow, or wants them reviewed. The job has two steps: **review** the queries in the code and list the problems worst first, then **deep dive** into whichever one the user picks. The skill never runs SQL against a database; when a database number is needed, it hands the user the command and waits for the paste.
 
-## 1. Gather inputs
+## Review
 
-Ask for everything missing in one message. The user runs the commands and pastes output; track which environment each paste came from.
-
-| Need | Why | How to get it |
-|---|---|---|
-| The statement with real parameter values | A generic/prepared plan can differ from the plan for the actual values | From the app, slow log, `pg_stat_statements`, or `performance_schema` |
-| Engine and major version | Features and column names are version-gated; QuestDB speaks the PostgreSQL protocol but is not PostgreSQL | `SELECT version();` |
-| Environment: prod, replica, staging | Decides what is safe to run (see §2) | Ask |
-| Table DDL, existing indexes, row counts | Index proposals must account for what exists; a 2k-row table never needs an index | PG: `\d+ t`, `SELECT reltuples FROM pg_class WHERE oid='t'::regclass`. MySQL: `SHOW CREATE TABLE t`, `SHOW INDEX FROM t`, `SELECT table_rows FROM information_schema.tables WHERE table_name='t'` |
-| What "slow" means | Latency target, calls per minute, p95 or one-off. A 2 s query that runs nightly is not a problem; a 50 ms query at 2k/s is | Ask, or read the statement stats |
-| The plan | §2 | |
-
-## 2. Capture the plan safely
-
-`EXPLAIN ANALYZE` **executes the statement**. For an `INSERT`, `UPDATE`, or `DELETE` that means real writes unless rolled back. Default to the safest form the environment allows and say which one you used.
-
-| Engine | Read-only prod (no write authorization) | SELECT, or DML where a rollback is acceptable |
-|---|---|---|
-| PostgreSQL | `EXPLAIN (FORMAT JSON) <stmt>` (estimates only) | `SET statement_timeout = '30s'; EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) <select>` — DML: `BEGIN; EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) <dml>; ROLLBACK;` |
-| MySQL 8.0+ | `EXPLAIN FORMAT=JSON <stmt>` (estimates only) | `EXPLAIN ANALYZE <select>` (8.0.18+, TREE output) — DML: `START TRANSACTION; EXPLAIN ANALYZE <dml>; ROLLBACK;` |
-| QuestDB | `EXPLAIN <stmt>` (never executes; no ANALYZE form exists) | Same; measure wall time from the client and watch `query_activity()` |
-
-Prefer a replica or staging with production-like data for the ANALYZE run. ANALYZE on a `SELECT` still reads every row the query touches, so set a timeout. Save the output to a file; the checker reads it from a file or stdin.
-
-## 3. Triage the plan
-
-1. Run the checker. It parses Postgres JSON and plain-text plans (pasted `EXPLAIN ANALYZE` output works), pasted `pg_stat_statements` output, MySQL JSON, MySQL `EXPLAIN ANALYZE` trees, and QuestDB `EXPLAIN` trees, and prints ranked findings: hot nodes by self time, row misestimates, disk sorts, hash batches, heavy nested loops, filtered seq scans, full scans, filesort, unused keys, and (QuestDB) full frame scans and non-JIT filters.
+1. **Scope.** Use the path the user gave, or the current repo. If the user says the database itself feels slow, also do step 6 before the list.
+2. **Scan.** Run the scanner; it reads every SQL statement in the code, each service's Liquibase changesets, and the indexes they define, then applies its rules.
 
    ```bash
-   python3 ${CLAUDE_SKILL_DIR}/scripts/explain_check.py plan.json          # ranked findings
-   python3 ${CLAUDE_SKILL_DIR}/scripts/explain_check.py plan.json --verbose # every node and rule, to stderr
-   python3 ${CLAUDE_SKILL_DIR}/scripts/explain_check.py plan.json --json    # machine-readable
+   python3 ${CLAUDE_SKILL_DIR}/scripts/scan_queries.py <path> --top 10                 # ranked list
+   python3 ${CLAUDE_SKILL_DIR}/scripts/scan_queries.py <path> --json /tmp/qq-scan.json  # all facts
    ```
 
-2. Read the top finding first and trace its chain. The usual ones:
-   - row misestimate → wrong join method → nested loop with 100k+ inner loops (fix statistics before adding indexes);
-   - no usable index → seq/full scan with most rows removed by filter;
-   - `ORDER BY` with no matching index → sort spills to disk or filesort;
-   - MySQL `filtered` under 10% → the chosen index is not the selective one;
-   - index-only scan with heap fetches → table needs vacuum, not a new index;
-   - QuestDB `Frame forward scan` with no `Interval` scan → the time predicate is not on the designated timestamp;
-   - `pg.generic-plan` → a prepared statement switched to a generic plan; fast in psql, slow from the app. Compare with a custom plan before touching statistics;
-   - `pg.no-partition-pruning` → a function on the partition key stops pruning; rewrite the predicate, do not add indexes;
-   - `pg.n-plus-one` → the plan is fine and the call count is the problem; batch the lookups, no index.
-3. Classify the cause: **statistics**, **index** (missing, wrong column order, not covering), **query shape** (non-sargable predicate, `OR`, `NOT IN`, `DISTINCT` hiding fan-out, `OFFSET`), **resources** (`work_mem`, `sort_buffer_size`), or **data design** (partitioning, materialization). Open the engine reference for the node glossary and catalog queries: `references/postgres.md`, `references/mysql.md`, or `references/questdb.md`.
+   It reads `.queryquant.json` at the repo root if present (paths to ignore, accepted exceptions, a tenant column that must lead every index, small tables). Run it, do not read its source. `references/scanner.md` explains each rule, what the scanner cannot see, and the config file.
+3. **Verify before claiming.** Open the cited line for every finding you are about to show, and read enough around it to be sure: the loop really runs per row, the filter really has no index, the list really has no bound. Follow a helper method one level if the finding depends on it. Drop a finding that does not hold, and say "not checked" for any you could not verify rather than guessing.
+4. **Rank.** Worst first: anything confirmed by database stats (step 6); then problems that hurt at any table size (N+1 loops, nested first and read paths before save paths; catch-all filters; unbounded reads; unchunked batches; offset paging); then missing indexes, marked "needs table size" because the code cannot show row counts. Small framework tables (scheduler, changelog) go last. A comment in the code that reports slowness (a ticket number, "30 seconds", "timeouts") moves a finding up and should be quoted.
+5. **Reply in chat** with at most 10 lines, one per finding, then up to 5 lines grouping the rest:
 
-## 4. Propose fixes, cheapest first
+   ```
+   1. billing · InvoiceRepo.java:63 · listing invoices loads each invoice's lines one at a time, then one payments query per line · nested N+1 on a read path · from code ("batch this, 30 s on big accounts")
+   2. …
+   + 7 more one-row lookups while saving an invoice (InvoiceService) — minor unless saves carry 100+ items
+   ```
 
-Order by cost to ship and risk, and say why a cheaper tier is not enough before moving to the next:
+   Each line: number, service, file:line, what the code does in everyday words, the problem, and the evidence level: `from code`, `confirmed by EXPLAIN`, or `confirmed by DB stats`. End with one sentence offering the deep dive, for example "Say 'look at 1' to get the EXPLAIN and a fix." Write no files unless asked.
+6. **"The database feels slow."** Hand the user the top-statements query for their engine (MySQL: the `performance_schema.events_statements_summary_by_digest` query in `references/mysql.md` §5; PostgreSQL: the `pg_stat_statements` query in `references/postgres.md` §5) to run on a reader and paste back. Match each top statement to its place in the code by its tables and filter columns, using the scan's `--json` facts, and rank those first as `confirmed by DB stats`.
 
-1. **Statistics** — `ANALYZE`, a higher statistics target on the skewed column, extended statistics for correlated columns. No schema change, no app deploy. Say what the corrected estimate would make the planner do; if the only alternative to the current plan is a scan of a huge table, the plan will not change and the hot node still needs tier 2 or 3.
-2. **Index** — new, reordered, partial, expression, or covering. Costs: write amplification on every insert/update, disk, build time, and (PG) losing HOT updates on the indexed column. Check write rate on the table before proposing.
-3. **Rewrite** — sargable predicates, `EXISTS` instead of `NOT IN`, keyset pagination, batching. Needs an app deploy; see `references/patterns.md`.
-4. **Parameters** — session-scoped first (`SET LOCAL work_mem`), with the plan diff as evidence. Never a global change from one query.
-5. **Schema** — partitioning, materialized views, denormalization. Last, because it changes every query on the table.
+## Deep dive ("look at 3", a pasted plan, or one slow statement)
 
-For each candidate, work out the node it changes and the expected new plan shape, the cost, the risk, and how to verify it. The report shows only the winner; the others get one line each in the evidence block. Do not propose planner toggles (`enable_seqscan`, `optimizer_switch`) for production, "filter in a subquery" (the planner already pushes predicates down), or `DISTINCT` to hide a join fan-out.
+Read `references/deep-dive.md` and follow it. In short: for a slow statement, write the `EXPLAIN` for it and ask the user to run it on a staging reader (never `EXPLAIN ANALYZE` of a write on prod), run `scripts/explain_check.py` on the pasted plan, and choose the cheapest fix that changes the costly node. For an N+1, an unbounded read, or an unchunked batch, skip the plan: write the bulk replacement and give the call-count check instead. Either way, answer with the short ticket card: What's wrong, Fix, Cost, Check it worked, Undo, then the evidence. Every index change uses lock-safe DDL.
 
-## 5. Verify
+## Writing for the user
 
-- Re-capture the plan with the same command and run the checker on both files. Compare execution time, buffers read, and the node that was supposed to change. If the hot node did not move, the diagnosis was wrong; go back to §3 rather than stacking fixes.
-- Confirm the index is used: PG `Index Name` in the plan and `pg_stat_user_indexes.idx_scan` rising; MySQL `key` in the plan; QuestDB an `Interval` or `Index` scan replacing the `Frame` scan, plus warm wall time from the client (run twice).
-- Try two or three other parameter values, including a skewed one, so the plan is not tuned to a single value.
-- Check the write side after an index: insert/update latency and, for PG, `n_tup_hot_upd` on the table.
-
-## 6. Roll out without locking
-
-| Engine | Build | If it fails | After |
-|---|---|---|---|
-| PostgreSQL | `SET lock_timeout = '5s'; CREATE INDEX CONCURRENTLY idx ON t (...);` — not inside a transaction block | The index is left `INVALID`; `DROP INDEX CONCURRENTLY idx` and retry | `ANALYZE t;` then watch `pg_stat_statements` mean time for the statement |
-| MySQL 8.0+ | `SET SESSION lock_wait_timeout = 5; ALTER TABLE t ADD INDEX idx (...), ALGORITHM=INPLACE, LOCK=NONE;` | The ALTER rolls back; retry off-peak | `ANALYZE TABLE t;` then watch the digest in `performance_schema` |
-| QuestDB | `ALTER TABLE t ALTER COLUMN sym ADD INDEX;` (atomic, non-blocking) — repartitioning means recreating the table | | Re-time the query; check ingestion latency, since writes to an indexed symbol column double |
-
-Large index builds on Aurora/RDS read replicas add replication lag; schedule them. `VACUUM FULL`, non-concurrent `REINDEX`, and `OPTIMIZE TABLE` lock the table and need a maintenance window.
-
-## Report format
-
-The reader is a busy engineer pasting this into a ticket. Write the ticket card below and nothing else: plain words, short sentences, the answer before the reasoning. Keep the five sections under about 250 words, not counting SQL blocks and the evidence block.
-
-- Say what the database is doing in everyday terms ("reads the whole table newest-first and checks each row"), not in plan field names. If a field name or number from the plan is needed, say what it means in the same sentence.
-- Give one recommended fix. Other options go in the evidence block, one line each with why they lost.
-- Put every number from the plan, the checker's findings, and the reasoning in the collapsed evidence block. The five sections hold only what the reader acts on.
-- When the plan came from staging or a sample and the user's numbers are from prod, say which is which.
-- If the user asked for something unsafe, such as `EXPLAIN ANALYZE` of a `DELETE` on prod, say so in the first sentence of What's wrong and give the safe command in Check it worked.
-
-```
-## What's wrong
-<two or three sentences: what the database does today and why that is slow>
-
-## Fix
-<one sentence: what to change and whether it is safe during the day>
-<one block, ready to run. DDL carries a lock timeout and CONCURRENTLY or ALGORITHM=INPLACE, LOCK=NONE, then ANALYZE. A query rewrite shows the new query.>
-
-## Cost
-<one or two sentences: write overhead in the user's own rates, disk, build time, and any side effect such as dead rows to vacuum or replica lag>
-
-## Check it worked
-<one or two sentences: re-run the same capture and compare execution time and rows or buffers read; name the node that should change>
-
-## Undo
-<the rollback: one SQL block for DDL, or "revert the deploy" for a query change>
-
-<details><summary>Evidence</summary>
-
-- Checker findings, with their rule names and numbers
-- The chain from cause to slowness, naming the node that costs the most and its share of the runtime
-- Safety notes the reader could get wrong, such as what a rolled-back statement still does
-- Other options considered, one line each, and why they were not chosen
-- Anything not verified
-</details>
-```
+Plain words and short sentences. Say what the code or database does in everyday terms ("runs one query per user", "reads the whole table"), not in plan field names; if a field name is needed, say what it means in the same sentence. Lead with the answer. Never present a guess from the code as a measured fact, and keep staging numbers apart from prod numbers.
 
 ## Files
 
-- `scripts/explain_check.py` — plan triage; run it, do not read it (`--help` for options)
-- `references/postgres.md` — plan node glossary, catalog queries for slow/unused/missing indexes, lock-safe DDL
-- `references/mysql.md` — EXPLAIN JSON and TREE glossary, `performance_schema` queries, online DDL
-- `references/questdb.md` — EXPLAIN node glossary, designated timestamp and partition pruning, SYMBOL indexes, LATEST ON / SAMPLE BY / ASOF JOIN shapes, ingestion side effects
+- `scripts/scan_queries.py` — the code scanner; run it, do not read it (`--help` for options)
+- `scripts/explain_check.py` — plan triage for the deep dive; run it, do not read it
+- `references/scanner.md` — what each scanner rule means, its blind spots, and `.queryquant.json`
+- `references/deep-dive.md` — the one-query procedure and the ticket card
+- `references/mysql.md`, `references/postgres.md`, `references/questdb.md` — engine glossaries, stats queries, lock-safe DDL
 - `references/patterns.md` — index and rewrite patterns, each with when it applies and when it does not

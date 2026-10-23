@@ -35,7 +35,7 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 | **jenkins** | Interact with Jenkins CI/CD — list jobs, check build status, trigger builds, read console output, diagnose failures. Credentials stored in `~/.claude/jenkins.env`. |
 | **jira** | Create and search Jira tickets from any terminal session. Credentials stored in `~/.claude/jira.env`, project aliases in `~/.claude/jira-projects.json`. Say "make this a Jira ticket" and it handles the rest. |
 | **mdthis** | Generate markdown artifacts from conversation context |
-| **queryquant** | Diagnose and fix a slow SQL query on PostgreSQL, MySQL, or QuestDB: capture EXPLAIN safely, triage the plan with `scripts/explain_check.py`, rank statistics/index/rewrite fixes, verify, and roll out with lock-safe DDL. |
+| **queryquant** | Review the SQL queries in a codebase (JDBI SQL Objects + Liquibase on Aurora MySQL first): lists N+1 loops, missing indexes, unbounded reads, catch-all filters, offset paging and unchunked batches worst first with file and line, then deep-dives one on request with an EXPLAIN you run and a short fix card. Never runs SQL itself. |
 | **red-team** | Adversarial 3-agent attack-path assessment (Attacker → Blue Team → Arbiter). Enumerates attack surface, builds realistic attack chains, and verifies which are actually exploitable. Generic across project shapes (service, CLI, library, daemon, data pipeline, IaC). |
 | **slidedeck** | Build polished, self-contained HTML slide deck presentations from source material |
 
