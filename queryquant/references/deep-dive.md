@@ -50,10 +50,12 @@ Prefer a replica or staging with production-like data for the ANALYZE run. ANALY
 1. Run the checker. It parses Postgres JSON and plain-text plans (pasted `EXPLAIN ANALYZE` output works), pasted `pg_stat_statements` output, MySQL JSON, MySQL `EXPLAIN ANALYZE` trees, and QuestDB `EXPLAIN` trees, and prints ranked findings: hot nodes by self time, row misestimates, disk sorts, hash batches, heavy nested loops, filtered seq scans, full scans, filesort, unused keys, and (QuestDB) full frame scans and non-JIT filters.
 
    ```bash
-   python3 scripts/explain_check.py plan.json          # ranked findings
-   python3 scripts/explain_check.py plan.json --verbose # every node and rule, to stderr
-   python3 scripts/explain_check.py plan.json --json    # machine-readable
+   python3 <skill dir>/scripts/explain_check.py plan.json          # ranked findings
+   python3 <skill dir>/scripts/explain_check.py plan.json --verbose # every node and rule, to stderr
+   python3 <skill dir>/scripts/explain_check.py plan.json --json    # machine-readable
    ```
+
+   `<skill dir>` is the folder SKILL.md was loaded from; SKILL.md gives the full path.
 
 2. Read the top finding first and trace its chain. The usual ones:
    - row misestimate → wrong join method → nested loop with 100k+ inner loops (fix statistics before adding indexes);
