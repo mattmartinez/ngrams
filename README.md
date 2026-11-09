@@ -28,6 +28,7 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 
 | Skill | Purpose |
 |---|---|
+| **autoresearch** | Autonomous ML research loop for the bundled [autoresearch](autoresearch/) project: edits the training script, runs timed experiments, keeps what improves. Needs an NVIDIA GPU host. Invoke with `/autoresearch`. |
 | **bug-hunt** | Adversarial 3-agent bug sweep (Hunter → Skeptic → Referee) |
 | **bug-hunt-research** | Autonomous prompt optimization loop for bug-hunt. Runs bug-hunt against benchmark codebases with planted bugs & traps, scores results, keeps or reverts prompt changes. Modeled on autoresearch. |
 | **claudish** | Manually rewrite the previous Claude response in plain English through local Ollama with `/claudish`; no automatic per-response invocation. |
@@ -41,15 +42,17 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 
 ## Install
 
-Sync each skill into your Claude Code skills directory:
+`install.sh` copies skills from this repo into a skills directory. `~/.claude/skills` is the default for [Claude Code](https://claude.com/claude-code); point it elsewhere if your harness uses a different location.
 
 ```bash
-./install.sh ~/.claude/skills
+./install.sh ~/.claude/skills                   # report only: shows what would change, changes nothing
+./install.sh ~/.claude/skills bug-hunt mdthis   # install the skills you name
+./install.sh ~/.claude/skills --all             # install every skill in this repo
 ```
 
-> **Note:** `install.sh` copies every skill directory into the target. `~/.claude/skills` is the default skill directory for [Claude Code](https://claude.com/claude-code); point it elsewhere if your harness uses a different location.
+> **Note:** A skill is any top-level folder here that holds a `SKILL.md`. Installing a skill makes the target folder an exact copy: files there that are not in this repo are deleted. Run the report first if the target might already hold a skill of the same name from somewhere else. A target that is a symlink is skipped, never replaced.
 >
-> Edits in this repo are inert until you re-run `install.sh` — run it after every skill change to keep `~/.claude/skills` in sync. The sync is one-way (repo → target) and itemizes what it changes.
+> Edits in this repo are inert until you install the skill again. The copy is one-way (repo → target).
 
 ### Claudish: manual local plain-English rewrites
 
