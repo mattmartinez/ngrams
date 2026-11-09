@@ -33,7 +33,6 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 | **bug-hunt-research** | Autonomous prompt optimization loop for bug-hunt. Runs bug-hunt against benchmark codebases with planted bugs & traps, scores results, keeps or reverts prompt changes. Modeled on autoresearch. |
 | **claudish** | Manually rewrite the previous Claude response in plain English through local Ollama with `/claudish`; no automatic per-response invocation. |
 | **fablequery** | Frame a genuinely-engineering problem accurately so a Fable subagent engages with rigor instead of a spurious safety decline. For legitimate gray-area work (own-systems automation, comparative analysis, integrity mechanics) — accurate framing, not circumvention. |
-| **jenkins** | Interact with Jenkins CI/CD — list jobs, check build status, trigger builds, read console output, diagnose failures. Credentials stored in `~/.claude/jenkins.env`. |
 | **jira** | Create and search Jira tickets from any terminal session. Credentials stored in `~/.claude/jira.env`, project aliases in `~/.claude/jira-projects.json`. Say "make this a Jira ticket" and it handles the rest. |
 | **mdthis** | Generate markdown artifacts from conversation context |
 | **queryquant** | Review the SQL queries in a codebase (JDBI SQL Objects + Liquibase on Aurora MySQL first): lists N+1 loops, missing indexes, unbounded reads, catch-all filters, offset paging and unchunked batches worst first with file and line, then deep-dives one on request with an EXPLAIN you run and a short fix card. Never runs SQL itself. |
@@ -111,10 +110,9 @@ Some skills need credentials stored outside any repo:
 |-------|------|-------------------|
 | **jira** | `~/.claude/jira.env` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
 | | `~/.claude/jira-projects.json` | alias → project key map |
-| **jenkins** | `~/.claude/jenkins.env` | `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN` |
 | **claudish** | Python 3 + `~/.claude/settings.json` (`env`) | Uses only the Python standard library. Optional `CLAUDISH_OLLAMA`, `CLAUDISH_MODEL`, and `CLAUDISH_TIMEOUT`; defaults are `http://localhost:11434`, `gemma4:12b`, and `120`. |
 
-Run `/jira setup` or `/jenkins setup` in any session to be walked through credential setup interactively.
+Run `/jira setup` in any session to be walked through credential setup interactively.
 
 ## Structure
 
