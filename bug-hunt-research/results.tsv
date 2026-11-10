@@ -1,12 +1,15 @@
-commit	composite	f1	recall	precision	trap_resistance	description
-7ec5569	0.687500	0.9375	0.9375	0.9375	1.0000	baseline
-eda8af4	0.709677	0.9032	0.8750	0.9333	1.0000	experiment 1: severity calibration examples in hunter
-c57645a	0.750000	0.9375	0.9375	0.9375	1.0000	experiment 2: severity calibration in referee
-3dedee8	1.000000	1.0000	1.0000	1.0000	1.0000	experiment 3: severity calibration + structured Low format
-4b6ff03	0.967742	0.9677	0.9375	1.0000	1.0000	experiment 4: auth line-number guidance in hunter
-324549a	1.000000	1.0000	1.0000	1.0000	1.0000	experiment 5: Unicode confusable + unused import checks
-f46d64c	1.000000	1.0000	1.0000	1.0000	1.0000
-324549a	1.000000	1.0000	1.0000	1.0000	1.0000	validation run 2: perfect again
-764142b	0.628571	0.6857	0.7500	0.6316	1.0000	opus-4.7 triage: pre-triage dirty tree (all 3 uncommitted edits — SKILL Step 1.2 + hunter compression + referee FIRST-range); recall hurt by referee rule picking import lines
-764142b	0.666667	0.6667	0.9375	0.5172	1.0000	opus-4.7 triage: clean HEAD baseline; opus finds more real bugs than manifest accounts for (14 FPs = real extras), benchmark is saturated
-4bfe7c0	0.536585	0.7317	0.9375	0.6000	1.0000	post-merge validation on opus-4.7: recall 15/16 (missed PLANTED-06 due to referee citing dispatch line 74 vs handler 161-165); 10 FPs are all real extras (SHA-256 pw hash, MAX_SESSIONS, missing-vs-zero, concurrency)
+commit	composite	f1	recall	precision	severity_accuracy	trap_resistance	description
+7ec5569	0.687500	0.9375	0.9375	0.9375		1.0000	baseline
+eda8af4	0.709677	0.9032	0.8750	0.9333		1.0000	experiment 1: severity calibration examples in hunter
+c57645a	0.750000	0.9375	0.9375	0.9375		1.0000	experiment 2: severity calibration in referee
+3dedee8	1.000000	1.0000	1.0000	1.0000		1.0000	experiment 3: severity calibration + structured Low format
+4b6ff03	0.967742	0.9677	0.9375	1.0000		1.0000	experiment 4: auth line-number guidance in hunter
+324549a	1.000000	1.0000	1.0000	1.0000		1.0000	experiment 5: Unicode confusable + unused import checks
+f46d64c	1.000000	1.0000	1.0000	1.0000		1.0000	
+324549a	1.000000	1.0000	1.0000	1.0000		1.0000	validation run 2: perfect again
+764142b	0.628571	0.6857	0.7500	0.6316		1.0000	opus-4.7 triage: pre-triage dirty tree (all 3 uncommitted edits — SKILL Step 1.2 + hunter compression + referee FIRST-range); recall hurt by referee rule picking import lines
+764142b	0.666667	0.6667	0.9375	0.5172		1.0000	opus-4.7 triage: clean HEAD baseline; opus finds more real bugs than manifest accounts for (14 FPs = real extras), benchmark is saturated
+4bfe7c0	0.536585	0.7317	0.9375	0.6000		1.0000	post-merge validation on opus-4.7: recall 15/16 (missed PLANTED-06 due to referee citing dispatch line 74 vs handler 161-165); 10 FPs are all real extras (SHA-256 pw hash, MAX_SESSIONS, missing-vs-zero, concurrency)
+742fe75	0.209836	0.5246	1.0000	0.3556	1.0000	0.4000	baseline 1: unchanged prompts; 53 confirmed, 16/16 planted; fable-5.2 at max effort; see insights.md for what precision and trap_resistance mean here
+742fe75	0.295385	0.4923	1.0000	0.3265	1.0000	0.6000	baseline 2: unchanged prompts; 56 confirmed, 16/16 planted; fable-5.2 at max effort
+e6858cf	0.304918	0.5246	1.0000	0.3556	0.9375	0.6000	gate: skeptic sample rule dropped and short-answer step added (run from a snapshot taken before the Step 5 skip-case sentence); 53 confirmed, 16/16 planted

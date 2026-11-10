@@ -1,4 +1,30 @@
-# Bug-Hunt Research Insights — Session mar24 (FINAL)
+# Bug-Hunt Research Insights — Session nov09 (2026-11-09)
+
+Three runs on Fable 5.2 at max effort, scored with the fixed `evaluate.py`. The two baselines use the prompts at `742fe75`. The gate run adds the Skeptic sample-rule change and the short-answer step.
+
+| Run | Composite | Recall | Precision | Sev Acc | Trap Res | Confirmed | Notes |
+|-----|-----------|--------|-----------|---------|----------|-----------|-------|
+| Baseline 1 | 0.2098 | 1.0000 | 0.3556 | 1.0000 | 0.4000 | 53 | 16/16 planted |
+| Baseline 2 | 0.2954 | 1.0000 | 0.3265 | 1.0000 | 0.6000 | 56 | 16/16 planted |
+| Gate | 0.3049 | 1.0000 | 0.3556 | 0.9375 | 0.6000 | 53 | 16/16 planted |
+
+## What these numbers can and cannot say
+- **Recall and severity are sound.** Every run found all 16 planted bugs.
+- **Precision is not.** Each run confirms 50+ issues in 865 lines, and the answer key lists 23 entries. The 26 to 31 "false positives" are mostly real issues the key does not list.
+- **Trap resistance is not.** No run reported any of the five traps as a bug, judging by the title and lines of every confirmed finding in the traps file. Every counted "trap hit" is a different finding within 10 lines of a trap: a blank signing key accepted in production (beside the default-key trap), a signature check that raises on non-ASCII input, an order with no total treated as free, a client that claims retries but makes one attempt. The scorer matches by file and line distance only.
+- **The composite wobbles by 0.09** between two runs of the same prompts. A prompt change that moves it less than that has not been shown to do anything.
+
+## Scorer fixes this session
+- Reads each bug's file and severity from the final report, and gives no credit without a file.
+- Uses every line range on a `File:` line. 40% of real entries cite several.
+- Writes a row only with `--description`. `--commit` names the commit that produced a saved reply.
+
+## Before the next loop
+The composite cannot steer prompt edits at this finding density. Either match findings to answer-key entries by what they say and not only by line distance, or build a larger benchmark with a complete answer key.
+
+---
+
+# Session mar24 (FINAL)
 
 ## Results Summary
 

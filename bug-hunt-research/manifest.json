@@ -56,8 +56,8 @@
     {
       "id": "PLANTED-06",
       "file": "easy/vuln_api_server.py",
-      "line_start": 161,
-      "line_end": 165,
+      "line_start": 164,
+      "line_end": 169,
       "difficulty": "easy",
       "severity": "Medium",
       "category": "security",
@@ -174,7 +174,7 @@
       "line_start": 34,
       "line_end": 34,
       "category": "security",
-      "description": "getattr on user input — LOOKS dangerous but the whitelist check on line 28 (frozenset membership test) ensures only safe str methods are called. This is a false positive trap."
+      "description": "getattr on user input — LOOKS dangerous but the whitelist check on line 29 (frozenset membership test) ensures only safe str methods are called. This is a false positive trap."
     },
     {
       "id": "TRAP-02",
@@ -198,7 +198,7 @@
       "line_start": 130,
       "line_end": 153,
       "category": "security",
-      "description": "Hardcoded default signing key — LOOKS dangerous but the code raises RuntimeError in production (line 146), only falls back to test key in dev/CI. There's also an env var override. This is intentional defense-in-depth."
+      "description": "Hardcoded default signing key — LOOKS dangerous but the code raises RuntimeError in production (line 147), only falls back to test key in dev/CI. There's also an env var override. This is intentional defense-in-depth."
     },
     {
       "id": "TRAP-05",
