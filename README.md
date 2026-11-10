@@ -35,7 +35,7 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 | **fablequery** | Hand an engineering problem to a Fable subagent for a well-scoped adversarial review: plain statement of what the system is, who owns it and what the work does, sanitized evidence, and a saved review. For systems you own or are authorized to test. |
 | **mdthis** | Generate markdown artifacts from conversation context |
 | **queryquant** | Review the SQL queries in a codebase (JDBI SQL Objects + Liquibase on Aurora MySQL first): lists N+1 loops, missing indexes, unbounded reads, catch-all filters, offset paging and unchunked batches worst first with file and line, then deep-dives one on request with an EXPLAIN you run and a short fix card. Never runs SQL itself. |
-| **red-team** | Adversarial 3-agent attack-path assessment (Attacker → Blue Team → Arbiter). Enumerates attack surface, builds realistic attack chains, and verifies which are actually exploitable. Generic across project shapes (service, CLI, library, daemon, data pipeline, IaC). |
+| **red-team** | Adversarial three-stage attack-path assessment (Attacker → Blue Team → Arbiter) with independent coverage synthesis. Maps realistic attack chains, checks exploitability from source, and reports residual uncertainty and coverage. Static and read-only across services, CLIs, libraries, daemons, data pipelines, and IaC. |
 | **slidedeck** | Build polished, self-contained HTML slide deck presentations from source material |
 
 ## Install
@@ -51,6 +51,40 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 > **Note:** A skill is any top-level folder here that holds a `SKILL.md`. Installing a skill makes the target folder an exact copy: files there that are not in this repo are deleted. Run the report first if the target might already hold a skill of the same name from somewhere else. A target that is a symlink is skipped, never replaced.
 >
 > Edits in this repo are inert until you install the skill again. The copy is one-way (repo → target).
+
+### Red team: static attack-path assessment
+
+Run `/red-team` only on code you own or are explicitly authorized to assess. It uses Attacker, Blue Team, and Arbiter stages, with independent coverage auditing and cross-zone chain synthesis. It reads source and configuration but does not send traffic, execute payloads, or modify the assessed project.
+
+```text
+/red-team                         # current directory
+/red-team src                     # a directory or single file
+/red-team --diff                  # changes from the default branch merge-base
+/red-team --commit abc1234        # changes from a commit's first parent
+/red-team --pr 42                 # changes in a GitHub pull request
+```
+
+Diff, commit, and PR assessments read an immutable snapshot of the requested commit, so local edits and later commits cannot contaminate the evidence. Python 3 and Git are required; PR mode also requires the GitHub CLI. Deleted files and supported manifest-only changes remain reviewable through the saved diff.
+
+An optional `.red-team-profile.md` in the target or a parent directory supplies deployment context:
+
+```markdown
+# Crown jewels
+- Tenant data and the ability to administer accounts
+
+# In-scope attacker personas
+- Unauthenticated internet user
+- Authenticated low-privilege tenant
+- Out of scope: physical access and malicious root
+
+# Deployed controls
+- Describe controls that exist outside the repository
+
+# Severity overrides
+- Describe domain-specific escalation rules
+```
+
+The short answer lists exploitable paths, mitigations, unresolved evidence, and coverage exclusions. Ask `look at N`, `what stopped the rest`, or `full report` for details. “Exploitable” means supported by a static code path; it is not a claim that a live exploit was executed. Secret values are redacted from reports.
 
 ### Claudish: manual local plain-English rewrites
 

@@ -167,9 +167,54 @@ check_installer() {
   if [[ -s "$det" ]]; then fail "$name" "$det"; else pass "$name"; fi
 }
 
-# 3. README table: every skill has a "| **<name>** |" row.
+# 3. Red-team installed payload: the resolver works outside the repository.
+check_red_team_installed() {
+  log "check 3: red-team installed payload"
+  local name="red-team installed payload" t="$TMP/red-team-target" fixture="$TMP/red-team-fixture"
+  local out="$TMP/red-team-installed.out" det="$TMP/red-team-installed.detail" rc
+  : > "$det"
+  mkdir -p "$fixture"
+
+  "$BASH_CMD" install.sh "$t" red-team > "$out" 2>&1
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    { echo "install exited $rc:"; tail -n 10 "$out"; } >> "$det"
+  fi
+  printf 'export const entry = true;\n' > "$fixture/app.tsx"
+  printf '{"name":"fixture"}\n' > "$fixture/package.json"
+  ( cd "$fixture" && python3 -I "$t/red-team/scripts/resolve_target.py" \
+      --profile-name .red-team-profile.md --ext ts,tsx,json --name Dockerfile -- . ) \
+      > "$out" 2> "$TMP/red-team-resolver.err"
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    { echo "installed resolver exited $rc"; cat "$TMP/red-team-resolver.err"; } >> "$det"
+  else
+    python3 - "$out" > "$TMP/red-team-json-check.out" 2>&1 <<'PY'
+import json
+import os
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+assert data["file_count"] == 2, data
+with open(data["scope_file"], encoding="utf-8") as fh:
+    scope = json.load(fh)
+paths = {entry["path"] for entry in scope["entries"] if entry["in_scope"]}
+assert paths == {"app.tsx", "package.json"}, paths
+assert all(os.path.isfile(entry["review_path"]) for entry in scope["entries"]), scope
+PY
+    rc=$?
+    if [[ $rc -ne 0 ]]; then
+      { echo "installed resolver returned an invalid scope:"; cat "$TMP/red-team-json-check.out"; } >> "$det"
+    fi
+  fi
+
+  if [[ -s "$det" ]]; then fail "$name" "$det"; else pass "$name"; fi
+}
+
+# 4. README table: every skill has a "| **<name>** |" row.
 check_readme() {
-  log "check 3: README table"
+  log "check 4: README table"
   local det="$TMP/readme.detail" s
   : > "$det"
   while IFS= read -r s; do
@@ -181,9 +226,9 @@ check_readme() {
   if [[ -s "$det" ]]; then fail "README table" "$det"; else pass "README table"; fi
 }
 
-# 4. Shared scripts: the two resolve_target.py copies must be byte-identical.
+# 5. Shared scripts: the two resolve_target.py copies must be byte-identical.
 check_shared_scripts() {
-  log "check 4: shared scripts"
+  log "check 5: shared scripts"
   local a="bug-hunt/scripts/resolve_target.py" b="red-team/scripts/resolve_target.py"
   local det="$TMP/shared.detail" f
   : > "$det"
@@ -196,9 +241,9 @@ check_shared_scripts() {
   if [[ -s "$det" ]]; then fail "shared scripts" "$det"; else pass "shared scripts"; fi
 }
 
-# 5. Private words: patterns in .private-words must not appear in tracked files or commit messages.
+# 6. Private words: patterns in .private-words must not appear in tracked files or commit messages.
 check_private_words() {
-  log "check 5: private words"
+  log "check 6: private words"
   local name="private words" pat="$TMP/private-words.pat" det="$TMP/pw.detail" out="$TMP/pw.out" rc
   if [[ ! -f .private-words ]]; then
     skip "$name (.private-words not present)"
@@ -241,9 +286,9 @@ check_private_words() {
   if [[ -s "$det" ]]; then fail "$name" "$det"; else pass "$name"; fi
 }
 
-# 6. queryquant scan scorer: full recall and no trap violations (local workspace only).
+# 7. queryquant scan scorer: full recall and no trap violations (local workspace only).
 check_queryquant_scan() {
-  log "check 6: queryquant scan scorer"
+  log "check 7: queryquant scan scorer"
   local name="queryquant scan scorer" scorer="queryquant-workspace/evalkit/score_scan.py"
   local json="$TMP/scan.json" det="$TMP/scan.detail" rc
   if [[ ! -f "$scorer" ]]; then
@@ -277,6 +322,7 @@ sys.exit(0 if r == 1.0 and c == 0 else 1)
 
 check_unit_tests
 check_installer
+check_red_team_installed
 check_readme
 check_shared_scripts
 check_private_words
