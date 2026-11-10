@@ -1,0 +1,59 @@
+{
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "model": "claude-opus-5-5",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const i=JSON.parse(d);const p=i.tool_input?.file_path||'';if(/(\\.env|\\.pem|\\.key|credentials\\.json|secret[s]?\\.json|service.account\\.json|\\.p12|\\.pfx|id_rsa|id_ed25519|\\.keystore)$/i.test(p)){console.error('[Hook] BLOCKED: Sensitive file detected: '+p);console.error('[Hook] Confirm with user before writing secrets/credentials');process.exit(2)}}catch{}console.log(d)})\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true
+  },
+  "effortLevel": "high",
+  "modelSettings": {
+    "claude-fable-5": {
+      "effortLevel": "high"
+    },
+    "claude-opus-5": {
+      "effortLevel": "high"
+    },
+    "claude-fable-5-1": {
+      "effortLevel": "high"
+    },
+    "claude-opus-5-5": {
+      "effortLevel": "medium"
+    },
+    "claude-fable-5-2": {
+      "effortLevel": "xhigh"
+    }
+  },
+  "advisorModel": "claude-fable-5-2",
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
+  "switchModelsOnFlag": false,
+  "skipAutoPermissionPrompt": true
+}
