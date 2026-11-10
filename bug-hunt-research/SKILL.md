@@ -11,7 +11,7 @@ Run an autonomous, indefinite experiment loop that modifies the bug-hunt skill's
 
 ## Target
 
-Everything lives in this repo checkout — run the loop **here**, not in `~/.claude/skills` (that copy is not a git repo, so the commit/revert engine below cannot run there). `<repo>` is your local clone of this repo. After a session, `./install.sh ~/.claude/skills` publishes the improved prompts to the live skill.
+Everything lives in this repo checkout — run the loop **here**, not in `~/.claude/skills` (that copy is not a git repo, so the commit/revert engine below cannot run there). `<repo>` is your local clone of this repo. After a session, `./install.sh ~/.claude/skills bug-hunt` publishes the improved prompts to the live skill.
 
 The skill files to optimize:
 ```
@@ -84,14 +84,14 @@ commit	composite	f1	recall	precision	severity_accuracy	trap_resistance	descripti
 
 ### 1.4 Run baseline
 
-Run the current unmodified bug-hunt prompts against all benchmarks and score them. This is your baseline. Record in results.tsv.
+Run the current unmodified bug-hunt prompts against all benchmarks and score them. This is your baseline. `evaluate.py` records it in results.tsv.
 
 **How to run a single evaluation:**
 
 1. Dispatch the 3-agent bug-hunt pipeline (hunter → skeptic → referee) as isolated Agent subagents against the benchmark directory `bug-hunt-research/benchmarks/`. Never give a hunter the manifest — it is the answer key.
 2. Capture the referee's final output to a temp file
-3. Run: `python3 bug-hunt-research/evaluate.py <referee_output_file> bug-hunt-research/manifest.json`
-4. Record the composite score and component scores
+3. Run: `python3 bug-hunt-research/evaluate.py <referee_output_file> bug-hunt-research/manifest.json --description "baseline"` — the script appends the row to results.tsv
+4. Note the composite score and component scores
 
 ### 1.5 Begin experiments
 
@@ -105,16 +105,16 @@ Once the baseline is recorded, begin the experiment loop.
 LOOP FOREVER:
     1. Read insights.md, check recent results
     2. Hypothesize ONE prompt change; edit the file(s) in bug-hunt/prompts/
-    3. Run the full bug-hunt pipeline against the benchmarks; score with evaluate.py
-    4. Append the result row to results.tsv
-    5. Decide (see Phase 3):
+    3. Run the full bug-hunt pipeline against the benchmarks; score with
+       evaluate.py --description "<what changed>" (the script appends the results.tsv row)
+    4. Decide (see Phase 3):
          keep    → git add bug-hunt/ bug-hunt-research/results.tsv bug-hunt-research/insights.md
                    git commit -m "experiment: <desc> (keep, composite X)"
          discard → git checkout -- bug-hunt/prompts/          # revert the prompt edit ONLY
                    git add bug-hunt-research/results.tsv
                    git commit -m "log: <desc> (discard, composite X)"
-    6. Update insights.md every ~3 experiments
-    7. GOTO 1
+    5. Update insights.md every ~3 experiments
+    6. GOTO 1
 
 Never use `git commit -am` or `git reset --hard` — both reach beyond bug-hunt/ and
 can destroy the results log or unrelated work.
@@ -130,7 +130,7 @@ For each experiment, run the full 3-agent pipeline as isolated Agent subagents:
 
 **Step C — Referee**: Launch a new Agent subagent with the current `referee.md` prompt content plus both the hunter's and skeptic's reports.
 
-**Step D — Score**: Save the referee output to a temp file, run `evaluate.py`, parse the JSON scores.
+**Step D — Score**: Save the referee output to a temp file, run `evaluate.py <referee_output_file> bug-hunt-research/manifest.json --description "<what changed>"`, parse the JSON scores from stdout. The script appends the results.tsv row; do not add one by hand.
 
 ### Key Rules
 
@@ -204,14 +204,14 @@ If **5 consecutive experiments** show no improvement (composite delta < 0.07, i.
 
 ### results.tsv
 
-Tab-separated, 8 columns. Append after every experiment:
+Tab-separated, 8 columns. `evaluate.py` appends one row per run when given `--description`; runs without it write nothing. Do not add rows by hand:
 
 ```
 commit	composite	f1	recall	precision	severity_accuracy	trap_resistance	description
 a1b2c3d	0.000000	0.0000	0.0000	0.0000	0.0000	0.0000	baseline
 ```
 
-`composite = f1 × (0.5 + 0.5·severity_accuracy) × trap_resistance` (formula v2, 2026-07 — severity is a 0.5–1.0 multiplier so it can't zero out real detection). Older rows use a 7-column schema and `f1 × severity_accuracy × trap_resistance`; their composites are not comparable, so re-baseline before comparing across the change.
+`composite = f1 × (0.5 + 0.5·severity_accuracy) × trap_resistance` (formula v2, 2026-07 — severity is a 0.5–1.0 multiplier so it can't zero out real detection). Older rows have an empty `severity_accuracy` cell and use `f1 × severity_accuracy × trap_resistance`; their composites are not comparable, so re-baseline before comparing across the change.
 
 ### insights.md
 
@@ -230,7 +230,7 @@ Contents:
 
 ## Phase 6: Publish & caveats
 
-- **Deploy after a session** (or after each solid `keep`): run `./install.sh ~/.claude/skills` from `<repo>` to copy the improved prompts into the live skill. Edits here are inert until you do.
+- **Deploy after a session** (or after each solid `keep`): run `./install.sh ~/.claude/skills bug-hunt` from `<repo>` to copy the improved prompts into the live skill. Edits here are inert until you do.
 - **Benchmark saturation**: only 16 planted bugs across 4 files. A strong model finds real bugs the manifest doesn't list; `manifest.json` carries a `neutral` list so those don't count against precision — extend it as you adjudicate new real extras. Consider a held-out `benchmarks/holdout/` set (its own manifest, ideally a second language) scored only at session end and never used for keep/discard, so gains reflect generalization, not memorization.
 
 ---

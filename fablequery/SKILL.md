@@ -43,8 +43,9 @@ Construct the Fable subagent call (Agent tool, `model: fable`) with these eight 
    never leave your machine. This is what makes it both safe and clean.
 7. **Ask it to be adversarial** — "assume I'm wrong; find the hole; don't rubber-stamp." Gets the best
    engineering out of it and signals you want rigor, not validation.
-8. **Ask for a standalone artifact** — "structured markdown, saved to a file" — so the output is a
-   durable review, not throwaway chat.
+8. **Ask for a standalone artifact** — "structured markdown, saved to `<path>`" — so the output is a
+   durable review, not throwaway chat. Name the path in the prompt: `research/<date>-<topic>-review.md`
+   in the current project unless the user names another place.
 
 ## Language: abuse-coded → accurate (all TRUE re-descriptions, not spin)
 | reads as abuse | the accurate engineering term |
@@ -77,11 +78,12 @@ and tools that return base64-encoded data into the model's context (remove them)
 > `<the out-of-scope items>`.
 > `[Context + SANITIZED data.]`
 > `[Specific questions.]`
-> Be adversarial — assume I'm wrong and find the hole. Structured markdown, standalone (saved to a file).
+> Be adversarial — assume I'm wrong and find the hole. Structured markdown, standalone, saved to
+> `research/<date>-<topic>-review.md`. Your final message is a short verdict plus that path.
 
 ## Notes
-- Run it `run_in_background: false` when you need the verdict to continue; the agent's final message is
-  the review.
+- Run it `run_in_background: false` when you need the verdict to continue; the agent saves the
+  review to the path the prompt names, and its final message is a short verdict plus that path.
 - Pair with a follow-up verification/test pass if the review greenlights a code change — Fable verifies
   the *reasoning*; your local gates verify the *implementation*.
 - Keep the reviews as durable findings (a `research/` or `docs/` trail), not chat — that's why point 8

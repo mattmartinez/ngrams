@@ -34,7 +34,7 @@ The user suspects queries are making the database slow, or wants them reviewed. 
 
 ## Deep dive ("look at 3", a pasted plan, or one slow statement)
 
-Read `references/deep-dive.md` and follow it. In short: for a slow statement, write the `EXPLAIN` for it and ask the user to run it on a staging reader (never `EXPLAIN ANALYZE` of a write on prod), run `scripts/explain_check.py` on the pasted plan, and choose the cheapest fix that changes the costly node. For an N+1, an unbounded read, or an unchunked batch, skip the plan: write the bulk replacement and give the call-count check instead. Either way, answer with the short ticket card: What's wrong, Fix, Cost, Check it worked, Undo, then the evidence. Every index change uses lock-safe DDL.
+Read `references/deep-dive.md` and follow it. In short: for a slow statement, write the `EXPLAIN` for it and ask the user to run it on a staging reader (never `EXPLAIN ANALYZE` of a write on prod), run `python3 ${CLAUDE_SKILL_DIR}/scripts/explain_check.py plan.json` on the pasted plan, and choose the cheapest fix that changes the costly node. For an N+1, an unbounded read, or an unchunked batch, skip the plan: write the bulk replacement and give the call-count check instead. Either way, answer with the short ticket card: What's wrong, Fix, Cost, Check it worked, Undo, then the evidence. Every index change uses lock-safe DDL.
 
 ## Writing for the user
 

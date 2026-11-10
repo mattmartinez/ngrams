@@ -91,7 +91,7 @@ Create `results.tsv` with the header row:
 commit	val_bpb	memory_gb	status	description
 ```
 
-This file is **tab-separated** (not commas). It stays untracked by git.
+This file is **tab-separated** (not commas). It stays untracked by git. If `--resume` was passed and `results.tsv` already exists, keep it and do not recreate it.
 
 ### 1.6 Confirm and go
 
@@ -267,7 +267,7 @@ If you run out of ideas:
 - Try reverting to baseline and taking a completely different path
 - Remove complexity instead of adding it
 
-At ~5 minutes per experiment, you run ~12 experiments/hour. An overnight session produces ~100 experiments. The user wakes up to a full results.tsv and an optimized model.
+At 6-8 minutes per experiment, you run about 8 experiments an hour. An overnight session produces roughly 60 to 70 experiments. The user wakes up to a full results.tsv and an optimized model.
 
 ---
 
@@ -276,3 +276,4 @@ At ~5 minutes per experiment, you run ~12 experiments/hour. An overnight session
 - [references/experiment-loop.md](references/experiment-loop.md) — Complete loop protocol with edge cases
 - [references/strategy.md](references/strategy.md) — Deep strategy guide for experiment planning
 - [references/architecture-ideas.md](references/architecture-ideas.md) — Catalog of architectural modifications to try
+- [references/hyperparameter-ranges.md](references/hyperparameter-ranges.md) — Validated exploration ranges for the tunable hyperparameters in train.py

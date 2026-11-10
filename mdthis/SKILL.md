@@ -53,6 +53,6 @@ $ARGUMENTS
 
 ## Prerequisites & Output
 
-- Output dir = `<launch-root>/local/`. Determine the launch-root from the session context: in Claude Code it is stated verbatim in the `<env>` block as "Working directory" — use that value. If no such env info exists, fall back to the nearest ancestor of the current cwd containing `.git/` and write to `<that>/local/`. Report the resolved absolute path in your reply.
+- Output dir = `<launch-root>/local/`. Determine the launch-root from the session context: in Claude Code it is the working directory given in the session's environment information (labelled "Primary working directory" or "Working directory") — use that value. If no such env info exists, fall back to the nearest ancestor of the current cwd containing `.git/` and write to `<that>/local/`. Report the resolved absolute path in your reply.
 - Create `local/` (`mkdir -p`) if it's missing. On filename collision, append `-2`, `-3`, … to the descriptor until the name is free; never overwrite.
 - If the launch-root is a git repo and `git check-ignore -q local` fails, note in your one-line reply that `local/` is not gitignored so the user can decide.

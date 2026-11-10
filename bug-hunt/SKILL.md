@@ -15,18 +15,9 @@ The scan target is: $ARGUMENTS
 Supported target formats:
 - **Directory path:** Scan all source files in the directory
 - **File path:** Scan a single file
-- **`--diff`:** Scan only files changed vs the default branch
-  ```bash
-  base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||'); [ -n "$base" ] || base=$(git rev-parse --verify -q main >/dev/null && echo main || echo master); git diff --name-only "$(git merge-base HEAD "$base")"..HEAD
-  ```
+- **`--diff`:** Scan only files changed vs the default branch (from the merge-base to HEAD)
 - **`--commit [sha]`:** Scan only files changed in a specific commit
-  ```bash
-  git diff --name-only [sha]^..[sha]
-  ```
 - **`--pr [number]`:** Scan files changed in a GitHub PR (requires gh CLI)
-  ```bash
-  gh pr diff [number] --name-only
-  ```
 
 When in diff mode, the Hunter should focus on the CHANGED lines but read surrounding context to understand the full picture. Pay extra attention to:
 - New code that doesn't handle existing edge cases
@@ -39,6 +30,8 @@ If no target was specified, scan the current working directory.
 
 Follow these steps in exact order. Each agent runs as a separate subagent to ensure context isolation.
 
+**Marker rule (applies to the Hunter, Skeptic and Referee).** Each agent must wrap its result in its start and end markers. If a reply lacks either marker, run that stage once more with the same input. If the second reply also lacks them, stop and tell the user which stage failed. With parallel Hunters, re-run only the Hunter that failed.
+
 ### Step 1: Read the prompt files
 
 Read these files using the skill directory variable:
@@ -46,26 +39,35 @@ Read these files using the skill directory variable:
 - `${CLAUDE_SKILL_DIR}/prompts/skeptic.md`
 - `${CLAUDE_SKILL_DIR}/prompts/referee.md`
 
-### Step 1.1: Load profile (if present)
+### Step 1.1: Resolve the target
 
-Search for a `.bug-hunt-profile.md` file by walking up from the scan target directory:
+Run this script. Run it, do not read it.
 
 ```bash
-if [ -d "[target]" ]; then
-  dir="$(cd "[target]" && pwd)"
-else
-  dir="$(cd "$(dirname "[target]")" && pwd)"
-fi
-while [ "$dir" != "/" ]; do
-  if [ -f "$dir/.bug-hunt-profile.md" ]; then
-    echo "Found profile: $dir/.bug-hunt-profile.md"
-    break
-  fi
-  dir="$(dirname "$dir")"
-done
+python3 ${CLAUDE_SKILL_DIR}/scripts/resolve_target.py --profile-name .bug-hunt-profile.md --ext ts,js,py,go,rs,rb,java,swift,kt,c,cpp,h -- <target>
 ```
 
-If found, read the profile file. The profile contains:
+`<target>` is the scan target given above, in one of the supported formats: a path (quote it if it has spaces), `--diff`, `--commit <sha>`, `--pr <number>`, or nothing at all for the current directory. If the user described the target in words instead of giving a path, find the folder or file they mean first and pass that path.
+
+It prints one JSON object on stdout and logs its steps to stderr. It never changes the working tree. The fields this skill uses:
+- `mode`: `path`, `diff`, `commit` or `pr`.
+- `target`: the absolute path scanned in path mode; null in the diff modes.
+- `repo_root`: the git repository root, or null.
+- `file_count`: how many source files are in scope, after skipping tests, specs and `node_modules`, `vendor`, `dist`, `__pycache__` and `.git`.
+- `files_list`: a text file with one in-scope file per line.
+- `diff_file`: in the three diff modes, the saved unified diff; null in path mode.
+- `checked_out`: whether the files under review match what is checked out. HEAD may differ from the commit under review if those files are unchanged since it. `head` is the current commit, `expected_head` the commit under review. Null in path mode.
+- `profile`: the absolute path of the nearest `.bug-hunt-profile.md` above the target, or null.
+- `notes`: plain-language warnings, such as how many changed files the filters skipped. Pass them on to the user.
+- `base`, `commit`, `pr`: the base branch, commit or PR number, when relevant.
+
+**If the script exits with code 2:** show its error message to the user and stop.
+
+**If `checked_out` is false:** stop before launching any agent. Tell the user in one or two plain sentences what is checked out and what is under review. Give the command that fixes it: `gh pr checkout <n>` for a PR; for a commit, check that commit out, or re-run on the current code. Never change the working tree yourself.
+
+### Step 1.2: Load profile (if present)
+
+If `profile` is set, read that file. The profile contains:
 - **Severity overrides** — domain-specific escalations (e.g., "hardcoded secrets → Critical" in financial services)
 - **Domain-specific checks** — additional checklist items the generic prompt doesn't cover
 
@@ -79,21 +81,12 @@ If found, read the profile file. The profile contains:
 
 **Resolve the target file list:**
 
-If the target uses `--diff`, `--commit`, or `--pr`, run the appropriate git/gh command to get the list of changed files. Pass this explicit file list to the Hunter instead of a directory.
+If the target uses `--diff`, `--commit`, or `--pr`, pass the explicit file list from `files_list` to the Hunter instead of a directory. Also pass the path in `diff_file`, and tell the Hunter to read the diff first, then the surrounding code.
 
-**If the resolved file list is empty:** Report 0 findings immediately and skip directly to Step 5 (Present the Final Report). No agents need to run — there is nothing to analyze.
+**If `file_count` is 0:** Report 0 findings immediately and skip directly to Step 5. No agents need to run — there is nothing to analyze.
 _Rationale:_ A `--diff` with no changes, an empty directory, or a filter that excludes everything is not a bug-free codebase, just a no-op scan. Spending agent budget on zero files is waste, and running Hunter against nothing produces noise rather than signal.
 
-**Count source files in the target:**
-
-```bash
-find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" \
-  -o -name "*.go" -o -name "*.rs" -o -name "*.rb" -o -name "*.java" \
-  -o -name "*.swift" -o -name "*.kt" -o -name "*.c" -o -name "*.cpp" \
-  -o -name "*.h" \) | grep -v '/node_modules/' | grep -v '/vendor/' | \
-  grep -v '/dist/' | grep -v '/__pycache__/' | grep -v '\.test\.' | \
-  grep -v '\.spec\.' | wc -l
-```
+**Use `file_count` to size the hunt:**
 
 - **If > 50 source files:** Run multiple Hunter agents in parallel by issuing multiple Agent calls in a single message, each assigned a different directory/module; merge findings before the Skeptic.
 - **If > 150 source files:** Run a recon agent first to identify the highest-risk modules (auth, data access, API handlers, config, payment/permissions, parsing), then dispatch parallel Hunters scoped to those modules only — do not scan the whole tree.
@@ -102,17 +95,19 @@ find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" \
 **Detect the project stack:**
 
 ```bash
-ls [target]/package.json [target]/tsconfig.json [target]/Cargo.toml \
-   [target]/go.mod [target]/pyproject.toml [target]/requirements.txt \
-   [target]/Gemfile [target]/pom.xml [target]/Package.swift 2>/dev/null
+ls <dir>/package.json <dir>/tsconfig.json <dir>/Cargo.toml \
+   <dir>/go.mod <dir>/pyproject.toml <dir>/requirements.txt \
+   <dir>/Gemfile <dir>/pom.xml <dir>/Package.swift 2>/dev/null
 ```
+
+`<dir>` is `target` in path mode (for a single file, its folder), and `repo_root` in the diff modes.
 
 Append the relevant framework-specific checklist to the Hunter's task (see the language-specific sections in `hunter.md`). Include all that apply — a project can use multiple languages.
 
 ### Step 2: Run the Hunter Agent
 
 Launch a new Agent tool subagent (subagent_type: general-purpose):
-- task: Include the hunter prompt text AND the scan target path AND the detected stack-specific checklist. The Hunter must use tools (Read, Bash with find/grep) to examine actual code.
+- task: Include the hunter prompt text AND the scan target path AND the detected stack-specific checklist. In the diff modes, also include the `diff_file` path with the instruction to read the diff first and then the surrounding code. The Hunter must use tools (Read, Bash with find/grep) to examine actual code.
 
 **Parallel-hunter BUG-ID namespacing:** When running multiple Hunters in parallel (per the Step 1.5 thresholds), assign each Hunter a distinct BUG-ID prefix so findings remain unique across the merge. The assignment scheme is:
 
@@ -126,7 +121,7 @@ In single-Hunter mode, no prefix is assigned and the Hunter uses its default `BU
 
 Wait for the Hunter to complete and capture its full output.
 
-Extract the content between `===HUNTER_FINDINGS_START===` and `===HUNTER_FINDINGS_END===` delimiters. This is the structured findings payload.
+Extract the content between `===HUNTER_FINDINGS_START===` and `===HUNTER_FINDINGS_END===` delimiters. This is the structured findings payload. If either marker is missing, apply the marker rule.
 
 ### Step 2b: Check for findings
 
@@ -139,7 +134,7 @@ Launch a new Agent tool subagent (subagent_type: general-purpose):
 
 The Skeptic must independently read the code to verify each claim.
 
-Extract the content between `===SKEPTIC_REPORT_START===` and `===SKEPTIC_REPORT_END===` delimiters.
+Extract the content between `===SKEPTIC_REPORT_START===` and `===SKEPTIC_REPORT_END===` delimiters. If either marker is missing, apply the marker rule.
 
 ### Step 4: Run the Referee Agent
 
@@ -150,16 +145,26 @@ Launch a new Agent tool subagent (subagent_type: general-purpose):
 
 The Referee must independently read the code to make final judgments.
 
-### Step 5: Present the Final Report
+Extract the content between `===REFEREE_REPORT_START===` and `===REFEREE_REPORT_END===` delimiters. If either marker is missing, apply the marker rule.
 
-Display the Referee's final verified bug report to the user. The report must use the detailed format for Critical and Medium bugs — each bug gets its own section with **What happens**, **Real-world impact**, and **Risk if unfixed**. Low-severity bugs can use a compact table. The Referee's report contains detailed structured entries for ALL severities (its required output format); when presenting to the user, condense the confirmed Low bugs into the compact table yourself.
+### Step 5: Give the short answer first
 
-Include:
-1. Summary stats
-2. Critical bugs (detailed format, each as its own subsection)
-3. Medium bugs (detailed format, each as its own subsection)
-4. Low bugs (compact table)
-5. Low-confidence items flagged for manual review
-6. A collapsed section with dismissed bugs (for transparency)
+If you skipped to this step because no files were in scope or the Hunter found nothing, there is no Referee report: say so in one line and stop.
 
-If zero bugs were confirmed, say so clearly — a clean report is a good result.
+Otherwise take only the text between `===REFEREE_REPORT_START===` and `===REFEREE_REPORT_END===`. Keep it in context; do not print it.
+
+Reply in chat with:
+1. One line of counts: reported, dismissed, confirmed (Critical / Medium / Low).
+2. A numbered list of the confirmed bugs, worst first, one line each, at most 10:
+   `1. path/file.py:42 · what goes wrong, in everyday words · Critical`
+3. If there are more than 10, one more line per severity that groups the rest ("+ 6 more Low: 4 unchecked inputs, 2 leaked file handles").
+4. One line naming any low-confidence items that need a manual look.
+5. One closing sentence: "Say 'look at 2' for the detail and a fix, or 'full report' for everything."
+
+Write no file unless asked. If zero bugs were confirmed, say so plainly — a clean report is a good result — and offer the dismissed list.
+
+**"Look at N."** Print a card for that bug from the Referee's entry: **What happens**, **Fix** (with its complexity and risks), **Risk if left**, **How to check it worked** (a test to add or a command to run; say when this is your suggestion and not the Referee's), then the evidence (file, lines, category, test coverage). Plain words, short sentences.
+
+**"Full report."** Print the Referee's report as written.
+
+Do not change the format the Referee is asked to produce: another tool parses it.

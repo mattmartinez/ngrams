@@ -33,6 +33,7 @@ $ARGUMENTS
 
 - If the user specifies a path, use it
 - Otherwise write to `local/` at the root of where the agent was launched: `local/<short-descriptor>-deck.html`
+- Create `local/` (`mkdir -p`) if it's missing. On filename collision, append `-2`, `-3`, … to the descriptor until the name is free; never overwrite an existing deck unless the user asked to update that deck.
 
 ## The Template
 

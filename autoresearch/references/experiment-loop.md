@@ -110,7 +110,7 @@ If the run crashed:
 1. **Read the traceback**: `tail -n 50 run.log`
 2. **Classify the failure:**
    - **Trivial bug** (typo, missing import, wrong variable name): Fix it, amend the commit, re-run.
-   - **OOM**: The model/batch is too large. Log as crash, revert, try smaller.
+   - **OOM**: Halve `DEVICE_BATCH_SIZE` (keep it a power of two) and re-run once (see SKILL.md Crash Recovery Protocol).
    - **Fundamentally broken idea**: Log as crash, revert, move on.
 3. **At most ONE targeted fix per traceback crash** (see SKILL.md Crash Recovery Protocol), then revert and log as `crash`. OOM follows its own path: halve `DEVICE_BATCH_SIZE` (keep it a power of two) and re-run once.
 
@@ -199,6 +199,8 @@ git reset --hard <commit>
 Update insights.md to note the rewind.
 
 ### Multiple consecutive crashes
+
+The two-crash reset in SKILL.md's Crash Recovery Protocol comes first; this section applies when crashes continue to a third in a row.
 
 If 3+ experiments crash in a row, something systemic is wrong. Steps:
 1. Revert to the last known-good commit

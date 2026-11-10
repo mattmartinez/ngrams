@@ -17,7 +17,8 @@ def fail(message: str) -> None:
 
 
 def find_transcript(session_id: str) -> Path:
-    root = Path.home() / ".claude" / "projects"
+    config_dir = os.getenv("CLAUDE_CONFIG_DIR")
+    root = (Path(config_dir) if config_dir else Path.home() / ".claude") / "projects"
     matches = list(root.rglob(f"{session_id}.jsonl"))
     if not matches:
         fail(f"transcript {session_id}.jsonl was not found under {root}")
