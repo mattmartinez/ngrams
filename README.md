@@ -111,4 +111,4 @@ Some skills need settings stored outside any repo:
 
 ## Structure
 
-Each skill is a directory with a `SKILL.md` entry point and optional supporting files (prompts, references). Skills are agent-agnostic — they describe *what to do*, not *which tool to call*.
+Each skill is a directory with a `SKILL.md` entry point and optional supporting files (prompts, references, scripts). The skills are written for Claude Code and name its tools where a step needs one. The instructions are plain Markdown, so most port to another harness with small edits.

@@ -30,3 +30,9 @@ tmp/
 
 # skill-creator eval workspaces
 *-workspace/
+
+# local list of words that must never be committed (read by check.sh)
+.private-words
+
+# local session handoff notes
+HANDOFF.md
