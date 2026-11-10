@@ -15,6 +15,9 @@ import sys
 import time
 from dataclasses import dataclass, asdict
 
+# Output goes to run.log. Flush every line, so the log is current during startup and survives a kill.
+sys.stdout.reconfigure(line_buffering=True)
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -22,7 +25,6 @@ import torch.nn.functional as F
 # Verify CUDA is available before proceeding (PR #176)
 if not torch.cuda.is_available():
     print("Error: No CUDA GPU detected. This script requires an NVIDIA GPU.")
-    print("If you're on Mac, see the MLX forks listed in README.md")
     print("If you're on Windows/Linux, ensure CUDA drivers are installed.")
     exit(1)
 
@@ -157,6 +159,10 @@ class GPT(nn.Module):
 
     @torch.no_grad()
     def init_weights(self):
+        # The model is built on the meta device, so PyTorch's default init never runs.
+        # Poison every parameter, then check at the end that all of them were set.
+        for p in self.parameters():
+            p.fill_(float("nan"))
         # Embedding and unembedding
         torch.nn.init.normal_(self.transformer.wte.weight, mean=0.0, std=1.0)
         torch.nn.init.normal_(self.lm_head.weight, mean=0.0, std=0.001)
@@ -188,6 +194,8 @@ class GPT(nn.Module):
         self.transformer.wte.to(dtype=torch.bfloat16)
         for ve in self.value_embeds.values():
             ve.to(dtype=torch.bfloat16)
+        missing = [name for name, p in self.named_parameters() if p.isnan().any()]
+        assert not missing, f"init_weights() does not initialize: {missing}"
 
     def _precompute_rotary_embeddings(self, seq_len, head_dim, base=10000, device=None):
         if device is None:
@@ -293,6 +301,9 @@ class GPT(nn.Module):
         logits = softcap * torch.tanh(logits / softcap)
 
         if targets is not None:
+            # prepare.evaluate_bpb calls this with reduction='none' and reads the result as plain
+            # per-token cross-entropy in nats. Keep that exact: put training-only loss terms
+            # (label smoothing, z-loss, masking, rescaling) behind `if self.training`.
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)).float(), targets.view(-1),
                                    ignore_index=-1, reduction=reduction)
             return loss
@@ -623,7 +634,7 @@ while True:
     mfu = 100 * num_flops_per_token * TOTAL_BATCH_SIZE / dt / GPU_PEAK_FLOPS
     remaining = max(0, TIME_BUDGET - total_training_time)
 
-    print(f"\rstep {step:05d} ({pct_done:.1f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt*1000:.0f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.1f}% | epoch: {epoch} | remaining: {remaining:.0f}s    ", end="", flush=True)
+    print(f"step {step:05d} ({pct_done:.1f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt*1000:.0f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.1f}% | epoch: {epoch} | remaining: {remaining:.0f}s")
 
     # GC management (Python's GC causes ~500ms stalls)
     if step == 0:
@@ -639,14 +650,12 @@ while True:
     if step > 10 and total_training_time >= TIME_BUDGET:
         break
 
-print()  # newline after \r training log
-
 total_tokens = step * TOTAL_BATCH_SIZE
 
 # Save checkpoint before eval so training isn't lost if eval crashes (PR #265)
 try:
     torch.save(model.state_dict(), "checkpoint.pt")
-except OSError as e:
+except (OSError, RuntimeError) as e:  # torch.save reports write failures as RuntimeError
     print(f"Warning: Failed to save checkpoint: {e}")
 
 # Final eval
@@ -666,7 +675,8 @@ if not math.isfinite(val_bpb) or val_bpb < 0:
 # Final summary
 t_end = time.time()
 startup_time = t_start_training - t_start
-steady_state_mfu = 100 * num_flops_per_token * TOTAL_BATCH_SIZE * (step - 10) / total_training_time / GPU_PEAK_FLOPS if total_training_time > 0 else 0
+# Steps 0-10 are not timed, so step - 11 steps make up total_training_time
+steady_state_mfu = 100 * num_flops_per_token * TOTAL_BATCH_SIZE * (step - 11) / total_training_time / GPU_PEAK_FLOPS if total_training_time > 0 else 0
 peak_vram_mb = torch.cuda.max_memory_allocated() / 1024 / 1024
 
 print("---")

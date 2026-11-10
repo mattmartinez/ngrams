@@ -61,7 +61,7 @@ rm -f results.json && uv run train.py > run.log 2>&1
 
 The leading `rm -f results.json` is mandatory: train.py only writes results.json on a successful run and never clears it, so without the delete a crash would leave the **previous** experiment's results.json in place and get logged as a false success. Deleting it up front makes "results.json absent after the run" a reliable crash signal.
 
-**Critical: redirect ALL output.** Never use `tee`. Never let training output flood your context window. The training script outputs progress lines with `\r` that would consume enormous context.
+**Critical: redirect ALL output.** Never use `tee`. Never let training output flood your context window. The training script prints one line per step, about a thousand lines in a run.
 
 ### Waiting for the run
 

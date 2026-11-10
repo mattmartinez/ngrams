@@ -112,13 +112,13 @@ Use this as a menu when planning experiments — especially when you've plateaue
 **What:** Add label smoothing to cross_entropy loss.
 **Expected impact:** Slight regularization, can prevent overconfident predictions.
 **Risk:** Low.
-**Implementation:** Add `label_smoothing=0.1` to `F.cross_entropy()`.
+**Implementation:** Add `label_smoothing=0.1` to `F.cross_entropy()`. Training only: gate it on `self.training`. `evaluate_bpb` reads the same loss call, so an ungated change alters val_bpb itself.
 
 ### Z-Loss
 **What:** Add a penalty on the log-partition function (logsumexp of logits).
 **Expected impact:** Prevents logit drift, stabilizes training.
 **Risk:** Low.
-**Implementation:** Add `z_loss = 1e-4 * logsumexp(logits, dim=-1).square().mean()` to the loss.
+**Implementation:** Add `z_loss = 1e-4 * logsumexp(logits, dim=-1).square().mean()` to the loss. Training only: gate it on `self.training`. `evaluate_bpb` reads the same loss call, so an ungated change alters val_bpb itself.
 
 ### Gradient Clipping
 **What:** Clip gradient norm before optimizer step.
