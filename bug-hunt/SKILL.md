@@ -53,17 +53,20 @@ It prints one JSON object on stdout and logs its steps to stderr. It never chang
 - `mode`: `path`, `diff`, `commit` or `pr`.
 - `target`: the absolute path scanned in path mode; null in the diff modes.
 - `repo_root`: the git repository root, or null.
-- `file_count`: how many source files are in scope, after skipping tests, specs and `node_modules`, `vendor`, `dist`, `__pycache__` and `.git`.
-- `files_list`: a text file with one in-scope file per line.
-- `diff_file`: in the three diff modes, the saved unified diff; null in path mode.
-- `checked_out`: whether the files under review match what is checked out. HEAD may differ from the commit under review if those files are unchanged since it. `head` is the current commit, `expected_head` the commit under review. Null in path mode.
+- `file_count`: how many in-scope files exist and are readable, after skipping tests, specs and `node_modules`, `vendor`, `dist`, `__pycache__` and `.git`. Deleted files are reviewed through the diff and are not included.
+- `change_count`: in diff, commit and PR modes, how many in-scope paths changed, including deletions; null in path mode.
+- `assessment_root`: the directory containing the files to review. In path mode this is the target directory (or a file's parent); in the other modes it is the immutable snapshot.
+- `snapshot_root`: the full immutable snapshot of the expected commit in diff, commit and PR modes; null in path mode. Read surrounding context here, not from the working tree.
+- `scope_file`: a JSON manifest with `version`, `root`, and `entries`. Each entry has `path`, `old_path`, `status`, `in_scope`, `reason`, and `review_path`. Diff modes include filtered and deleted entries as well as readable source. Deleted entries have a null `review_path`; their old content is in the diff.
+- `diff_file`: in the three diff modes, the saved unified diff restricted to in-scope paths, including deletions; null in path mode.
+- `checked_out`: informational only: whether HEAD is the commit under review. `head` is the current commit and `expected_head` the commit under review. Null in path mode. A false value is safe because reviews use the immutable snapshot; never stop merely because it is false.
 - `profile`: the absolute path of the nearest `.bug-hunt-profile.md` above the target, or null.
 - `notes`: plain-language warnings, such as how many changed files the filters skipped. Pass them on to the user.
 - `base`, `commit`, `pr`: the base branch, commit or PR number, when relevant.
 
 **If the script exits with code 2:** show its error message to the user and stop.
 
-**If `checked_out` is false:** stop before launching any agent. Tell the user in one or two plain sentences what is checked out and what is under review. Give the command that fixes it: `gh pr checkout <n>` for a PR; for a commit, check that commit out, or re-run on the current code. Never change the working tree yourself.
+**Review source:** Use each in-scope manifest entry's `review_path` and use `assessment_root` for surrounding context. Dirty files, later commits, and a different checked-out commit do not alter the snapshot. Do not change the working tree yourself.
 
 ### Step 1.2: Load profile (if present)
 
@@ -79,12 +82,16 @@ If `profile` is set, read that file. The profile contains:
 
 ### Step 1.5: Scope assessment and stack detection
 
-**Resolve the target file list:**
+**Resolve the assessment packet:**
 
-If the target uses `--diff`, `--commit`, or `--pr`, pass the explicit file list from `files_list` to the Hunter instead of a directory. Also pass the path in `diff_file`, and tell the Hunter to read the diff first, then the surrounding code.
+Pass `assessment_root` and `scope_file` to the Hunter in every mode. In diff, commit and PR modes, also pass `diff_file`: tell the Hunter to read the diff first, then read each in-scope, non-deleted entry at its `review_path` and surrounding context under `snapshot_root`. Review deleted entries from their old content in the diff; never reconstruct them from the dirty or later working tree.
 
-**If `file_count` is 0:** Report 0 findings immediately and skip directly to Step 5. No agents need to run — there is nothing to analyze.
-_Rationale:_ A `--diff` with no changes, an empty directory, or a filter that excludes everything is not a bug-free codebase, just a no-op scan. Spending agent budget on zero files is waste, and running Hunter against nothing produces noise rather than signal.
+**Apply the zero-assessment gate:**
+
+- In path mode, if `file_count` is 0, report 0 findings immediately and skip directly to Step 5.
+- In diff, commit and PR modes, do this only if `change_count` is 0. A deletion-only change has `file_count` 0 but `change_count` greater than 0 and must still be reviewed from the diff.
+
+_Rationale:_ An empty directory or a diff with no in-scope changes is a no-op scan, not a bug-free codebase. Spending agent budget on it is waste. Deleted code, however, can remove guards or checks and remains reviewable evidence even though no current file exists.
 
 **Use `file_count` to size the hunt:**
 
@@ -100,14 +107,14 @@ ls <dir>/package.json <dir>/tsconfig.json <dir>/Cargo.toml \
    <dir>/Gemfile <dir>/pom.xml <dir>/Package.swift 2>/dev/null
 ```
 
-`<dir>` is `target` in path mode (for a single file, its folder), and `repo_root` in the diff modes.
+`<dir>` is `assessment_root` in every mode (for a single path target, the resolver has already set it to the file's folder). This keeps stack detection on the same immutable source revision as the review.
 
 Append the relevant framework-specific checklist to the Hunter's task (see the language-specific sections in `hunter.md`). Include all that apply — a project can use multiple languages.
 
 ### Step 2: Run the Hunter Agent
 
 Launch a new Agent tool subagent (subagent_type: general-purpose):
-- task: Include the hunter prompt text AND the scan target path AND the detected stack-specific checklist. In the diff modes, also include the `diff_file` path with the instruction to read the diff first and then the surrounding code. The Hunter must use tools (Read, Bash with find/grep) to examine actual code.
+- task: Include the hunter prompt text, `assessment_root`, `scope_file`, and the detected stack-specific checklist. In the diff modes, also include `diff_file` with the instruction to read the diff first and then surrounding code from the snapshot. Tell the Hunter which manifest entries are in scope and to use their `review_path` values. The Hunter must use tools (Read, Bash with find/grep) to examine actual code.
 
 **Parallel-hunter BUG-ID namespacing:** When running multiple Hunters in parallel (per the Step 1.5 thresholds), assign each Hunter a distinct BUG-ID prefix so findings remain unique across the merge. The assignment scheme is:
 
@@ -130,7 +137,7 @@ If the Hunter reported TOTAL FINDINGS: 0, skip Steps 3-4 and go directly to Step
 ### Step 3: Run the Skeptic Agent
 
 Launch a new Agent tool subagent (subagent_type: general-purpose):
-- task: Include the skeptic prompt text AND the Hunter's structured findings (content between the `===HUNTER_FINDINGS_START===` and `===HUNTER_FINDINGS_END===` delimiters — BUG-IDs, files, lines, claims, evidence, severity). Do NOT include narrative or methodology text — only the structured findings.
+- task: Include the skeptic prompt text, `assessment_root`, `scope_file`, and the Hunter's structured findings (content between the `===HUNTER_FINDINGS_START===` and `===HUNTER_FINDINGS_END===` delimiters — BUG-IDs, files, lines, claims, evidence, severity). In diff modes, include `diff_file` too. Do NOT include narrative or methodology text — only the structured findings.
 
 The Skeptic must independently read the code to verify each claim.
 
@@ -139,9 +146,10 @@ Extract the content between `===SKEPTIC_REPORT_START===` and `===SKEPTIC_REPORT_
 ### Step 4: Run the Referee Agent
 
 Launch a new Agent tool subagent (subagent_type: general-purpose):
-- task: Include the referee prompt text AND both:
+- task: Include the referee prompt text, `assessment_root`, `scope_file`, and both:
   - The Hunter's full findings (between `===HUNTER_FINDINGS_START===` / `===HUNTER_FINDINGS_END===`)
   - The Skeptic's full report (between `===SKEPTIC_REPORT_START===` / `===SKEPTIC_REPORT_END===`)
+  In diff modes, include `diff_file` too.
 
 The Referee must independently read the code to make final judgments.
 
@@ -149,7 +157,7 @@ Extract the content between `===REFEREE_REPORT_START===` and `===REFEREE_REPORT_
 
 ### Step 5: Give the short answer first
 
-If you skipped to this step because no files were in scope or the Hunter found nothing, there is no Referee report: say so in one line and stop.
+If you skipped to this step because the path had no readable in-scope files, the diff had no in-scope changes, or the Hunter found nothing, there is no Referee report: say so in one line and stop.
 
 Otherwise take only the text between `===REFEREE_REPORT_START===` and `===REFEREE_REPORT_END===`. Keep it in context; do not print it.
 

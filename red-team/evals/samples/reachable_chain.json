@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "coverage": {
+    "assessed": [
+      {"zone": "http-and-storage", "files": ["app/routes.py", "app/tenant.py", "app/reports.py"]}
+    ],
+    "skipped": [],
+    "limitations": []
+  },
+  "paths": [
+    {
+      "id": "ATTACK-HTTP-1",
+      "title": "Tenant argument reaches another tenant's report store",
+      "severity": "High",
+      "persona": "Authenticated low-privilege user",
+      "asset": "Confidential reports belonging to other tenants",
+      "entry_point": {"file": "app/routes.py", "line": 7},
+      "sink": {"file": "app/reports.py", "line": 10},
+      "category": "authz/idor",
+      "precondition": "The attacker has any valid account and knows another tenant identifier.",
+      "steps": [
+        "app/routes.py:7 accepts the report request.",
+        "app/tenant.py:5 trusts the tenant argument without comparing the session tenant.",
+        "app/reports.py:10 reads the selected tenant's report."
+      ],
+      "evidence": [
+        "requested_tenant returns request['args']['tenant']",
+        "REPORT_ROOT / tenant / report_name"
+      ],
+      "impact": "Cross-tenant confidential report disclosure.",
+      "mitigations": ["Bind report lookup to the authenticated session tenant."],
+      "zone": "http-and-storage",
+      "capabilities_required": ["A low-privilege account"],
+      "capabilities_gained": ["Read other tenants' reports"],
+      "chain_links": [
+        {"file": "app/routes.py", "line": 7, "role": "entry"},
+        {"file": "app/tenant.py", "line": 5, "role": "missing authorization"},
+        {"file": "app/reports.py", "line": 10, "role": "disclosure sink"}
+      ],
+      "verdict": "EXPLOITABLE",
+      "analysis": "Every link is reachable; no code compares the requested tenant with the caller's session.",
+      "confidence": 96,
+      "true_severity": "High",
+      "defense": "None on the demonstrated chain.",
+      "remediation": "Derive the tenant from the authenticated session and reject cross-tenant requests.",
+      "remediation_complexity": "Moderate",
+      "remediation_risks": "Legitimate administrative impersonation needs an explicit separately authorized flow.",
+      "validation": "Add a test proving one tenant cannot read another tenant's report."
+    },
+    {
+      "id": "ATTACK-HTTP-2",
+      "title": "Report path components escape the report root",
+      "severity": "High",
+      "persona": "Authenticated low-privilege user",
+      "asset": "Local text files readable by the service process",
+      "entry_point": {"file": "app/routes.py", "line": 8},
+      "sink": {"file": "app/reports.py", "line": 10},
+      "category": "path-traversal",
+      "precondition": "The attacker controls the report path and knows a readable target pathname.",
+      "steps": [
+        "app/routes.py:8 accepts an untrusted report path.",
+        "app/tenant.py:6 returns another untrusted path component without validation.",
+        "app/reports.py:9 joins the components without containment checks and app/reports.py:10 reads the result."
+      ],
+      "evidence": [
+        "REPORT_ROOT / tenant / report_name has no absolute-path, parent-directory, or resolved-containment check."
+      ],
+      "impact": "Read service-accessible text outside the intended report directory.",
+      "mitigations": ["UTF-8 decoding and filesystem permissions limit eligible targets but do not enforce containment."],
+      "zone": "http-and-storage",
+      "capabilities_required": ["A low-privilege account and a known target path"],
+      "capabilities_gained": ["Read local files outside the report root"],
+      "chain_links": [
+        {"file": "app/routes.py", "line": 8, "role": "untrusted path entry"},
+        {"file": "app/tenant.py", "line": 6, "role": "unvalidated tenant path component"},
+        {"file": "app/reports.py", "line": 10, "role": "local file disclosure sink"}
+      ],
+      "verdict": "EXPLOITABLE",
+      "analysis": "Both path components reach file reading without any containment defense.",
+      "confidence": 97,
+      "true_severity": "High",
+      "defense": "No resolved-path containment check exists.",
+      "remediation": "Resolve the authorized tenant root and candidate, then reject absolute paths, traversal, and every target outside that root.",
+      "remediation_complexity": "Moderate",
+      "remediation_risks": "Canonicalization must preserve valid report names and avoid symlink and time-of-check/time-of-use escapes.",
+      "validation": "Reject controlled absolute and parent-directory fixtures outside the authorized root while retaining legitimate report reads."
+    },
+    {
+      "id": "ATTACK-HTTP-3",
+      "title": "Absolute special-file path drives unbounded reads",
+      "severity": "High",
+      "persona": "Unauthenticated caller of the public report route",
+      "asset": "Availability of report workers and the host process",
+      "entry_point": {"file": "app/routes.py", "line": 8},
+      "sink": {"file": "app/reports.py", "line": 10},
+      "category": "dos/resource",
+      "precondition": "The attacker controls the report path and can select a readable endless or very large input on a typical POSIX deployment.",
+      "steps": [
+        "app/routes.py:8 accepts an absolute special-file path.",
+        "app/reports.py:9 discards prior path components when joining the absolute input.",
+        "app/reports.py:10 reads until EOF without a byte limit, regular-file check, timeout, or cancellation."
+      ],
+      "evidence": ["path.read_text(encoding='utf-8') accumulates the entire input, while an endless character device has no EOF."],
+      "impact": "Occupy a worker and grow process memory until report service or host capacity is exhausted.",
+      "mitigations": ["Filesystem permissions and external resource limits may constrain targets and blast radius but are not in-scope controls."],
+      "zone": "http-and-storage",
+      "capabilities_required": ["Control of the report path and a readable endless or large input"],
+      "capabilities_gained": ["Drive unbounded blocking reads and memory consumption"],
+      "chain_links": [
+        {"file": "app/routes.py", "line": 8, "role": "special-file path entry"},
+        {"file": "app/reports.py", "line": 9, "role": "absolute path selection"},
+        {"file": "app/reports.py", "line": 10, "role": "unbounded read sink"}
+      ],
+      "verdict": "EXPLOITABLE",
+      "analysis": "The absolute-path primitive reaches an unbounded synchronous read with a concrete endless-input deployment precondition.",
+      "confidence": 95,
+      "true_severity": "High",
+      "defense": "No regular-file restriction, byte bound, timeout, or cancellation exists in scope.",
+      "remediation": "Allow only authorized regular files and enforce a bounded read with request deadlines and memory limits as defense in depth.",
+      "remediation_complexity": "Moderate",
+      "remediation_risks": "Limits must preserve legitimate report sizes and avoid truncating valid responses silently.",
+      "validation": "Reject special files and enforce clean failure on controlled oversized inputs while preserving ordinary bounded reports."
+    }
+  ],
+  "stats": {
+    "total": 3,
+    "exploitable": 3,
+    "mitigated": 0,
+    "not_a_risk": 0,
+    "undetermined": 0,
+    "severity_counts": {"Critical": 0, "High": 3, "Medium": 0, "Low": 0}
+  }
+}

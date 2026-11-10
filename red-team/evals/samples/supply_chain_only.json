@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "coverage": {
+    "assessed": [{"zone": "dependency-build", "files": ["requirements.txt"]}],
+    "skipped": [],
+    "limitations": ["The fixture intentionally contains no runtime source files."]
+  },
+  "paths": [
+    {
+      "id": "ATTACK-SUPPLY-1",
+      "title": "Dependency installer uses cleartext package transport",
+      "severity": "Medium",
+      "persona": "Network-positioned supply-chain attacker",
+      "asset": "Integrity of code installed into the application environment",
+      "entry_point": {"file": "requirements.txt", "line": 1},
+      "sink": {"file": "requirements.txt", "line": 1},
+      "category": "supply-chain",
+      "precondition": "The attacker can intercept dependency installation traffic.",
+      "steps": ["The package index is HTTP, so installation accepts unauthenticated dependency responses."],
+      "evidence": ["--index-url uses the http scheme at requirements.txt:1."],
+      "impact": " substituted dependency code executes with build or application privileges.",
+      "mitigations": ["Use authenticated HTTPS transport and locked hashes."],
+      "zone": "dependency-build",
+      "capabilities_required": ["Intercept installation traffic"],
+      "capabilities_gained": ["Supply dependency code"],
+      "chain_links": [{"file": "requirements.txt", "line": 1, "role": "insecure package source"}],
+      "verdict": "EXPLOITABLE",
+      "analysis": "This is reachable during installation even though the change contains no runtime source.",
+      "confidence": 94,
+      "true_severity": "Medium",
+      "defense": "No transport authentication is configured in the fixture.",
+      "remediation": "Require HTTPS and hash checking for every dependency.",
+      "remediation_complexity": "Trivial",
+      "remediation_risks": "A private mirror must support valid TLS before enforcement.",
+      "validation": "Inspect the resolved installer configuration and reject every non-HTTPS index."
+    },
+    {
+      "id": "ATTACK-SUPPLY-2",
+      "title": "Version pin does not authenticate same-version artifacts",
+      "severity": "Medium",
+      "persona": "Attacker controlling the configured package index or its publishing path",
+      "asset": "Integrity of dependency artifacts accepted into builds",
+      "entry_point": {"file": "requirements.txt", "line": 1},
+      "sink": {"file": "requirements.txt", "line": 2},
+      "category": "supply-chain",
+      "precondition": "The attacker controls the configured index and installation has no external approved-hash enforcement.",
+      "steps": [
+        "requirements.txt:1 establishes the artifact source.",
+        "requirements.txt:2 pins only a version, so the compromised index can substitute different bytes under the same version."
+      ],
+      "evidence": ["sample-runtime==3.1.4 has no approved hashes and the manifest has no --require-hashes directive."],
+      "impact": "Substituted dependency content enters the build or application environment.",
+      "mitigations": ["The exact version pin prevents upgrades to a different version but does not authenticate same-version bytes."],
+      "zone": "dependency-build",
+      "capabilities_required": ["Control of the configured package index"],
+      "capabilities_gained": ["Supply same-version dependency content"],
+      "chain_links": [
+        {"file": "requirements.txt", "line": 1, "role": "package source"},
+        {"file": "requirements.txt", "line": 2, "role": "unverified artifact acceptance"}
+      ],
+      "verdict": "EXPLOITABLE",
+      "analysis": "Version selection is constrained, but artifact integrity is not verified independently of the source.",
+      "confidence": 96,
+      "true_severity": "Medium",
+      "defense": "No artifact hashes or hash-enforcement directive are present.",
+      "remediation": "Generate a complete approved-hash lockfile and enforce --require-hashes for installation.",
+      "remediation_complexity": "Moderate",
+      "remediation_risks": "Hash coverage must include transitive dependencies and supported artifact variants or legitimate installs can fail.",
+      "validation": "Serve different bytes under the pinned version in a controlled fixture and require a hash mismatch to stop installation."
+    },
+    {
+      "id": "ATTACK-SUPPLY-3",
+      "title": "Publisher compromise introduces a malicious same-version build",
+      "severity": "Medium",
+      "persona": "Attacker with compromised project-specific publishing credentials",
+      "asset": "Build-account execution and installed dependency integrity",
+      "entry_point": {"file": "requirements.txt", "line": 2},
+      "sink": {"file": "requirements.txt", "line": 2},
+      "category": "supply-chain",
+      "precondition": "The attacker can publish a malicious same-version source distribution that pip later selects and builds.",
+      "steps": [
+        "requirements.txt:2 requests an externally published version without an approved digest.",
+        "The compromised publisher supplies a malicious same-version source distribution whose build backend executes during installation."
+      ],
+      "evidence": ["The manifest has no independent approved hash to distinguish publisher-controlled replacement bytes."],
+      "impact": "Attacker-controlled build commands execute as the dependency-installing account and the installed package is compromised.",
+      "mitigations": ["Transport encryption and an otherwise honest registry do not reject artifacts from a compromised publisher."],
+      "zone": "dependency-build",
+      "capabilities_required": ["Project-specific publishing access and a later source-distribution installation"],
+      "capabilities_gained": ["Execute build-backend commands as the installation account"],
+      "chain_links": [
+        {"file": "requirements.txt", "line": 2, "role": "unverified publisher artifact request"},
+        {"file": "requirements.txt", "line": 2, "role": "source build execution sink"}
+      ],
+      "verdict": "EXPLOITABLE",
+      "analysis": "This publisher-specific route requires neither network interception nor registry-wide compromise and remains undetected without independent hashes.",
+      "confidence": 96,
+      "true_severity": "Medium",
+      "defense": "No approved artifact digest is enforced before building the publisher-supplied distribution.",
+      "remediation": "Require independently reviewed hashes and immutable publishing controls with scoped credentials and audit review.",
+      "remediation_complexity": "Moderate",
+      "remediation_risks": "Hash review and immutable retention must preserve legitimate releases, rollbacks, and emergency publishing workflows.",
+      "validation": "Confirm a publisher-supplied artifact with an unapproved digest is rejected before its build backend executes."
+    }
+  ],
+  "stats": {
+    "total": 3,
+    "exploitable": 3,
+    "mitigated": 0,
+    "not_a_risk": 0,
+    "undetermined": 0,
+    "severity_counts": {"Critical": 0, "High": 0, "Medium": 3, "Low": 0}
+  }
+}

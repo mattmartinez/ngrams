@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve a scan target into a list of in-scope files, an optional diff, and a profile.
+"""Resolve a scan target into a scope manifest, an optional diff, and a profile.
 
 Usage:
     python3 resolve_target.py --profile-name NAME --ext a,b,c [--name FILE ...] -- [target args]
@@ -18,7 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 SKIP_DIRS = {"node_modules", "vendor", "dist", "__pycache__", ".git"}
 SKIP_NAME_PARTS = (".test.", ".spec.")
@@ -33,11 +33,12 @@ def log(msg: str) -> None:
     print(f"{PREFIX} {msg}", file=sys.stderr, flush=True)
 
 
-def run(cmd: Sequence[str], cwd: Optional[str] = None, check: bool = True) -> subprocess.CompletedProcess:
+def run(cmd: Sequence[str], cwd: Optional[str] = None, check: bool = True,
+        env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess:
     """Run a command, log it, and return the result. Raise ResolveError on failure when check is set."""
     log(f"run: {' '.join(cmd)}" + (f"  (cwd={cwd})" if cwd else ""))
     try:
-        proc = subprocess.run(list(cmd), cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.run(list(cmd), cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except FileNotFoundError:
         raise ResolveError(f"'{cmd[0]}' was not found on PATH")
     except OSError as exc:
@@ -51,11 +52,13 @@ def run(cmd: Sequence[str], cwd: Optional[str] = None, check: bool = True) -> su
 
 
 def out(proc: subprocess.CompletedProcess) -> str:
-    return proc.stdout.decode("utf-8", "replace")
+    # surrogateescape round-trips every POSIX filename through JSON's escapes.
+    return proc.stdout.decode("utf-8", "surrogateescape")
 
 
-def git(args: Sequence[str], cwd: str, check: bool = True) -> subprocess.CompletedProcess:
-    return run(["git", "-c", "core.quotepath=false", *args], cwd=cwd, check=check)
+def git(args: Sequence[str], cwd: str, check: bool = True,
+        env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess:
+    return run(["git", "-c", "core.quotepath=false", *args], cwd=cwd, check=check, env=env)
 
 
 # ---------------------------------------------------------------- arguments
@@ -136,7 +139,11 @@ def walk_dir(root: str, exts: Set[str], names: Set[str]) -> List[str]:
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
         for fn in filenames:
             full = os.path.join(dirpath, fn)
-            if in_scope(os.path.relpath(full, root), exts, names):
+            if (
+                in_scope(os.path.relpath(full, root), exts, names)
+                and os.path.isfile(full)
+                and os.access(full, os.R_OK)
+            ):
                 found.append(full)
     return sorted(found)
 
@@ -156,7 +163,8 @@ def repo_root_of(start: str, required: bool) -> Optional[str]:
             raise ResolveError(f"not a git repository: {start}")
         log("target is not inside a git repository")
         return None
-    root = os.path.realpath(out(proc).strip())
+    raw_root = out(proc)
+    root = os.path.realpath(raw_root[:-1] if raw_root.endswith("\n") else raw_root)
     log(f"repo root: {root}")
     return root
 
@@ -196,55 +204,161 @@ def default_base(repo: str, notes: List[str]) -> Tuple[str, str]:
     raise ResolveError("could not find a base branch: no origin/HEAD, and no 'main' or 'master' branch")
 
 
+def commit_parents(repo: str, sha: str) -> List[str]:
+    """Read parents from the commit object, not from shallow-history traversal."""
+    raw = out(git(["cat-file", "-p", sha], cwd=repo))
+    parents = [line[len("parent "):] for line in raw.splitlines() if line.startswith("parent ")]
+    if parents and not verify_commit(repo, parents[0]):
+        raise ResolveError(
+            f"parent commit {parents[0][:12]} of {sha[:12]} is unavailable; "
+            "fetch more history (for example, git fetch --deepen=1) and rerun"
+        )
+    return parents
+
+
 def empty_tree(repo: str) -> str:
     proc = run(["git", "hash-object", "-t", "tree", os.devnull], cwd=repo)
     return out(proc).strip()
 
 
-def git_changed(repo: str, old: str, new: str) -> Tuple[List[str], bytes]:
-    names = git(["diff", "--name-only", "-z", "--no-ext-diff", old, new], cwd=repo)
-    files = [f for f in out(names).split("\0") if f]
-    diff = git(["diff", "--no-color", "--no-ext-diff", old, new], cwd=repo)
-    return files, diff.stdout
-
-
-def filter_changed(repo: str, changed: List[str], exts: Set[str], names: Set[str], notes: List[str]) -> List[str]:
-    kept, filtered, missing = [], 0, 0
-    for rel in changed:
-        if not in_scope(rel, exts, names):
-            filtered += 1
-            continue
-        full = os.path.join(repo, rel)
-        if not os.path.isfile(full):
-            missing += 1
-            continue
-        kept.append(full)
-    log(f"changed files: {len(changed)} total, {len(kept)} in scope, {filtered} skipped by filters, {missing} missing on disk")
-    if filtered:
-        notes.append(f"{filtered} of {len(changed)} changed files were skipped by the file-type and folder filters.")
-    if missing:
-        notes.append(f"Dropped {missing} of {len(changed)} changed files: not in the working tree (deleted, or not checked out).")
-    return sorted(set(kept))
+def git_changed(repo: str, old: str, new: str) -> List[Tuple[str, str]]:
+    """Return every changed path and its review status, without rename detection."""
+    proc = git(["diff", "--name-status", "-z", "--no-renames", "--no-ext-diff", old, new], cwd=repo)
+    fields = out(proc).split("\0")
+    if fields and fields[-1] == "":
+        fields.pop()
+    changed = []
+    i = 0
+    while i < len(fields):
+        code = fields[i]
+        i += 1
+        if "\t" in code:  # tolerate Git versions that retain the status/path tab
+            code, rel = code.split("\t", 1)
+        else:
+            if i >= len(fields):
+                raise ResolveError("could not parse git's changed-file output")
+            rel = fields[i]
+            i += 1
+        if code == "A":
+            status = "added"
+        elif code == "D":
+            status = "deleted"
+        else:
+            status = "modified"
+        changed.append((rel, status))
+    changed.sort(key=lambda item: item[0])
+    return changed
 
 
 DIFF_CHUNK = 200
 
 
-def files_match(repo: str, commit: str, paths: List[str]) -> bool:
-    """True when every path is the same in `commit` and in the working tree."""
-    log(f"comparing {len(paths)} in-scope paths between {commit} and the working tree")
-    for i in range(0, len(paths), DIFF_CHUNK):
-        chunk = paths[i:i + DIFF_CHUNK]
-        proc = run(["git", "--literal-pathspecs", "diff", "--quiet", "--no-ext-diff", commit, "--", *chunk],
-                   cwd=repo, check=False)
-        if proc.returncode == 1:
-            log(f"files differ in chunk starting at path {i}")
-            return False
-        if proc.returncode != 0:
-            detail = proc.stderr.decode("utf-8", "replace").strip().splitlines()
-            raise ResolveError(f"could not compare files with {commit[:12]}: {detail[0] if detail else 'no error output'}")
-    log("in-scope files are identical to the commit under review")
-    return True
+def scoped_diff(repo: str, old: str, new: str, paths: List[str]) -> bytes:
+    chunks = []
+    for start in range(0, len(paths), DIFF_CHUNK):
+        chunk = paths[start:start + DIFF_CHUNK]
+        # Literal pathspecs preserve names containing glob or pathspec magic bytes.
+        proc = run(
+            ["git", "--literal-pathspecs", "-c", "core.quotepath=false", "diff", "--no-color",
+             "--no-ext-diff", "--no-renames", old, new, "--", *chunk],
+            cwd=repo,
+        )
+        chunks.append(proc.stdout)
+    return b"".join(chunks)
+
+
+def merge_base(repo: str, old: str, new: str, description: str) -> str:
+    proc = git(["merge-base", old, new], cwd=repo, check=False)
+    if proc.returncode != 0:
+        raise ResolveError(f"{description} have no common ancestor")
+    return out(proc).strip()
+
+
+# ---------------------------------------------------------------- snapshots and manifest
+
+
+def neutralize_escaping_symlinks(snapshot: str, notes: List[str]) -> None:
+    """Keep internal links, but turn links escaping the snapshot into link-text files."""
+    root = os.path.realpath(snapshot)
+    replaced = 0
+    for dirpath, dirnames, filenames in os.walk(snapshot, topdown=False, followlinks=False):
+        for name in dirnames + filenames:
+            path = os.path.join(dirpath, name)
+            if not os.path.islink(path):
+                continue
+            resolved = os.path.realpath(path)
+            try:
+                inside = os.path.commonpath([root, resolved]) == root
+            except ValueError:
+                inside = False
+            if inside:
+                continue
+            link_text = os.readlink(path)
+            os.unlink(path)
+            with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="") as fh:
+                fh.write(link_text)
+            replaced += 1
+    if replaced:
+        noun = "symlink" if replaced == 1 else "symlinks"
+        notes.append(
+            f"Replaced {replaced} snapshot {noun} whose resolved target escaped the snapshot "
+            "with regular files containing the tracked link text."
+        )
+    log(f"snapshot symlink safety: {replaced} escaping links replaced")
+
+
+def make_snapshot(repo: str, commit: str, tmp: str, notes: List[str]) -> str:
+    """Materialize commit through a temporary index, never the repository index or worktree."""
+    snapshot = os.path.join(tmp, "snapshot")
+    os.makedirs(snapshot)
+    index = os.path.join(tmp, "index")
+    env = os.environ.copy()
+    env["GIT_INDEX_FILE"] = index
+    git(["read-tree", commit], cwd=repo, env=env)
+    git(["checkout-index", "--all", f"--prefix={snapshot}{os.sep}"], cwd=repo, env=env)
+    neutralize_escaping_symlinks(snapshot, notes)
+    log(f"immutable snapshot: {snapshot} (commit {commit[:12]})")
+    return snapshot
+
+
+def scope_entries(snapshot: str, changed: List[Tuple[str, str]], exts: Set[str], names: Set[str],
+                  notes: List[str]) -> Tuple[List[dict], int]:
+    entries = []
+    filtered = 0
+    for rel, status in changed:
+        scoped = in_scope(rel, exts, names)
+        if not scoped:
+            filtered += 1
+        candidate = os.path.join(snapshot, *rel.split("/"))
+        review_path = None
+        if status != "deleted" and os.path.isfile(candidate):
+            review_path = candidate
+        reason = None
+        if not scoped:
+            reason = "Excluded by file-type, test, or folder filters."
+        elif status != "deleted" and review_path is None:
+            reason = "Not a readable regular file in the immutable snapshot."
+        entries.append({
+            "path": rel,
+            "old_path": None,
+            "status": status,
+            "in_scope": scoped,
+            "reason": reason,
+            "review_path": review_path,
+        })
+    if filtered:
+        notes.append(f"{filtered} of {len(changed)} changed files were skipped by the file-type and folder filters.")
+    change_count = sum(1 for rel, _status in changed if in_scope(rel, exts, names))
+    return entries, change_count
+
+
+def write_scope(tmp: str, root: str, entries: List[dict]) -> str:
+    scope_file = os.path.join(tmp, "scope.json")
+    with open(scope_file, "w", encoding="utf-8") as fh:
+        json.dump({"version": 1, "root": root, "entries": entries}, fh, indent=2)
+        fh.write("\n")
+    log(f"wrote {len(entries)} manifest entries to {scope_file}")
+    return scope_file
 
 
 # ---------------------------------------------------------------- profile
@@ -278,8 +392,9 @@ def resolve(argv: List[str]) -> dict:
     notes: List[str] = []
     result = {
         "mode": mode, "target": None, "repo_root": None, "base": None, "commit": None, "pr": None,
-        "file_count": 0, "files_list": None, "diff_file": None, "checked_out": None,
+        "file_count": 0, "change_count": None, "diff_file": None, "checked_out": None,
         "head": None, "expected_head": None, "profile": None, "notes": notes,
+        "assessment_root": None, "snapshot_root": None, "scope_file": None,
     }
     diff_bytes: Optional[bytes] = None
 
@@ -294,11 +409,23 @@ def resolve(argv: List[str]) -> dict:
         else:
             files = [target]
             start = os.path.dirname(target)
+        assessment_root = start
         log(f"path target: {target}, {len(files)} files in scope")
         repo = repo_root_of(start, required=False)
         result["repo_root"] = repo
         if repo:
             result["head"] = head_of(repo, required=False)
+        entries = [{
+            "path": os.path.relpath(full, assessment_root).replace(os.sep, "/"),
+            "old_path": None,
+            "status": "present",
+            "in_scope": True,
+            "reason": None,
+            "review_path": full,
+        } for full in files]
+        result["file_count"] = len(files)
+        result["assessment_root"] = assessment_root
+        tmp = tempfile.mkdtemp(prefix="resolve_target-")
     else:
         if mode == "pr" and not shutil.which("gh"):
             raise ResolveError("the GitHub CLI 'gh' was not found on PATH; it is needed for --pr")
@@ -309,57 +436,71 @@ def resolve(argv: List[str]) -> dict:
         result["head"] = head
         if mode == "diff":
             base, base_ref = default_base(repo, notes)
-            mb = git(["merge-base", "HEAD", base_ref], cwd=repo, check=False)
-            if mb.returncode != 0:
-                raise ResolveError(f"HEAD and '{base}' have no common ancestor")
-            mb_sha = out(mb).strip()
-            log(f"base branch: {base}, merge-base: {mb_sha}")
-            changed, diff_bytes = git_changed(repo, mb_sha, "HEAD")
+            mb = merge_base(repo, "HEAD", base_ref, f"HEAD and '{base}'")
+            log(f"base branch: {base}, merge-base: {mb}")
+            old, new = mb, head
             result.update(base=base, expected_head=head, checked_out=True)
         elif mode == "commit":
             sha = verify_commit(repo, value)
             if not sha:
                 raise ResolveError(f"unknown commit: {value}")
-            parents = out(git(["rev-list", "--parents", "-n", "1", sha], cwd=repo)).split()[1:]
+            parents = commit_parents(repo, sha)
             old = parents[0] if parents else empty_tree(repo)
             if not parents:
                 log("root commit: comparing against the empty tree")
             if len(parents) > 1:
                 notes.append("This is a merge commit; the diff is against its first parent.")
-            changed, diff_bytes = git_changed(repo, old, sha)
+            new = sha
             result.update(commit=sha, expected_head=sha, checked_out=(head == sha))
         else:  # pr
-            names_proc = run(["gh", "pr", "diff", value, "--name-only"], cwd=repo)
-            changed = [line.strip() for line in out(names_proc).splitlines() if line.strip()]
-            diff_bytes = run(["gh", "pr", "diff", value], cwd=repo).stdout
-            pr_head = out(run(["gh", "pr", "view", value, "--json", "headRefOid", "-q", ".headRefOid"], cwd=repo)).strip()
-            if not pr_head:
-                raise ResolveError(f"gh returned no head commit for PR {value}")
-            result.update(pr=int(value), expected_head=pr_head, checked_out=(head == pr_head))
-        if mode in ("commit", "pr") and result["checked_out"] is False:
-            expected = result["expected_head"]
-            scoped = [rel for rel in changed if in_scope(rel, ns.exts, names)]
-            if mode == "pr" and not verify_commit(repo, expected):
-                log(f"PR head {expected} is not a local object; skipping the content comparison")
-                notes.append("The PR's head commit is not in the local repository.")
-            elif files_match(repo, expected, scoped):
-                result["checked_out"] = True
-                notes.append("HEAD is not the commit under review, but the files under review are unchanged since it.")
-        files = filter_changed(repo, changed, ns.exts, names, notes)
+            proc = run(["gh", "pr", "view", value, "--json", "headRefOid,baseRefOid"], cwd=repo)
+            try:
+                payload = json.loads(out(proc))
+            except (ValueError, TypeError) as exc:
+                raise ResolveError(f"gh returned invalid JSON for PR {value}: {exc}")
+            if not isinstance(payload, dict):
+                raise ResolveError(f"gh returned no object for PR {value}")
+            head_oid = payload.get("headRefOid")
+            base_oid = payload.get("baseRefOid")
+            if not isinstance(head_oid, str) or not head_oid or not isinstance(base_oid, str) or not base_oid:
+                raise ResolveError(f"gh returned no head or base commit for PR {value}")
+            new = verify_commit(repo, head_oid)
+            base_sha = verify_commit(repo, base_oid)
+            if not new or not base_sha:
+                raise ResolveError(
+                    f"PR {value} base and head commits are not both available locally; fetch the base branch "
+                    f"and PR head, then check out the PR with 'gh pr checkout {value}' or rerun after fetching"
+                )
+            old = merge_base(repo, base_sha, new, f"PR {value} base and head")
+            result.update(
+                base=base_sha, commit=new, pr=int(value), expected_head=new,
+                checked_out=(head == new),
+            )
+
+        changed = git_changed(repo, old, new)
+        scoped_paths = [rel for rel, _status in changed if in_scope(rel, ns.exts, names)]
+        diff_bytes = scoped_diff(repo, old, new, scoped_paths)
+        tmp = tempfile.mkdtemp(prefix="resolve_target-")
+        snapshot = make_snapshot(repo, new, tmp, notes)
+        entries, change_count = scope_entries(snapshot, changed, ns.exts, names, notes)
+        result["file_count"] = sum(
+            1 for entry in entries if entry["in_scope"] and entry["review_path"] is not None
+        )
+        result["change_count"] = change_count
+        result["assessment_root"] = snapshot
+        result["snapshot_root"] = snapshot
+        assessment_root = snapshot
         log(f"checked_out: {result['checked_out']} (head {head}, expected {result['expected_head']})")
         if result["checked_out"] is False:
-            notes.append(f"The code under review ({result['expected_head'][:12]}) is not what is checked out ({head[:12]}).")
+            notes.append(
+                f"HEAD ({head[:12]}) differs from the commit under review ({result['expected_head'][:12]}); "
+                "review files come from the immutable snapshot."
+            )
 
-    if not files:
+    if (mode == "path" and result["file_count"] == 0) or (mode != "path" and result["change_count"] == 0):
         notes.append("No files are in scope.")
 
-    tmp = tempfile.mkdtemp(prefix="resolve_target-")
-    files_list = os.path.join(tmp, "files.txt")
-    with open(files_list, "w", encoding="utf-8") as fh:
-        fh.write("".join(f + "\n" for f in files))
-    result["files_list"] = files_list
-    result["file_count"] = len(files)
-    log(f"wrote {len(files)} paths to {files_list}")
+    result["scope_file"] = write_scope(tmp, assessment_root, entries)
     if diff_bytes is not None:
         diff_file = os.path.join(tmp, "changes.diff")
         with open(diff_file, "wb") as fh:
@@ -370,7 +511,7 @@ def resolve(argv: List[str]) -> dict:
             notes.append("The diff is empty.")
 
     result["profile"] = find_profile(start, ns.profile_name)
-    log(f"done: mode={mode} file_count={len(files)} notes={len(notes)}")
+    log(f"done: mode={mode} file_count={result['file_count']} change_count={result['change_count']} notes={len(notes)}")
     return result
 
 

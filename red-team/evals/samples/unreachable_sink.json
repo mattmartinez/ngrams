@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "coverage": {
+    "assessed": [{"zone": "process", "files": ["main.py", "legacy_debug.py"]}],
+    "skipped": [],
+    "limitations": []
+  },
+  "paths": [
+    {
+      "id": "ATTACK-PROCESS-1",
+      "title": "Legacy shell helper has no production caller",
+      "severity": "Low",
+      "persona": "Unauthenticated outsider",
+      "asset": "Process execution",
+      "entry_point": {"file": "legacy_debug.py", "line": 6},
+      "sink": {"file": "legacy_debug.py", "line": 7},
+      "category": "injection",
+      "precondition": "Some caller would first need to import and invoke the helper with attacker input.",
+      "steps": ["main.py neither imports nor calls legacy_debug.py; no other fixture file does."],
+      "evidence": ["The subprocess call exists only in the unused helper."],
+      "impact": "No currently reachable impact.",
+      "mitigations": ["Delete the unused shell helper before it acquires a caller."],
+      "zone": "process",
+      "capabilities_required": ["A nonexistent call path"],
+      "capabilities_gained": [],
+      "chain_links": [],
+      "verdict": "NOT_A_RISK",
+      "analysis": "The dangerous sink is unreachable from the only production entry point.",
+      "confidence": 99,
+      "true_severity": "Low",
+      "defense": "No import or invocation route.",
+      "remediation": "Remove the dead helper.",
+      "remediation_complexity": "Trivial",
+      "remediation_risks": "None in this fixture.",
+      "validation": "Keep an import/call search in review and delete the helper."
+    }
+  ],
+  "stats": {
+    "total": 1,
+    "exploitable": 0,
+    "mitigated": 0,
+    "not_a_risk": 1,
+    "undetermined": 0,
+    "severity_counts": {"Critical": 0, "High": 0, "Medium": 0, "Low": 1}
+  }
+}

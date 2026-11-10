@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "coverage": {
+    "assessed": [{"zone": "order-workflow", "files": ["orders.py", "ledger.py"]}],
+    "skipped": [],
+    "limitations": []
+  },
+  "paths": [
+    {
+      "id": "ATTACK-WORKFLOW-1",
+      "title": "Cancellation replay violates the one-refund invariant",
+      "severity": "High",
+      "persona": "Authenticated customer with one payable order",
+      "asset": "Ledger balance and refund integrity",
+      "entry_point": {"file": "orders.py", "line": 6},
+      "sink": {"file": "ledger.py", "line": 8},
+      "category": "tampering",
+      "precondition": "The customer can replay cancellation for the same order.",
+      "steps": [
+        "orders.py:6-8 accepts cancellation without checking prior state and overwrites it unconditionally.",
+        "orders.py:9 invokes credit on every replay.",
+        "ledger.py:8 appends a new credit record without deduplicating the order reference."
+      ],
+      "evidence": [
+        "No state comparison precedes credit(order['account'], order['total'], order['id']).",
+        "CREDITS.append(record) executes for every call at ledger.py:8."
+      ],
+      "impact": "Repeated credits for one purchase corrupt balances and permit financial abuse.",
+      "mitigations": ["Require a PENDING to CANCELLED transition and make ledger credit idempotent by order ID."],
+      "zone": "order-workflow",
+      "capabilities_required": ["Own an order", "Replay a permitted request"],
+      "capabilities_gained": ["Repeat a refund credit"],
+      "chain_links": [
+        {"file": "orders.py", "line": 8, "role": "invalid transition"},
+        {"file": "orders.py", "line": 9, "role": "repeated credit invocation"},
+        {"file": "ledger.py", "line": 8, "role": "duplicate credit append"}
+      ],
+      "verdict": "EXPLOITABLE",
+      "analysis": "The second and later cancellation calls follow exactly the same reachable credit path as the first.",
+      "confidence": 97,
+      "true_severity": "High",
+      "defense": "None; setting CANCELLED does not gate the operation.",
+      "remediation": "Atomically enforce the state invariant and add a uniqueness constraint for refund references.",
+      "remediation_complexity": "Moderate",
+      "remediation_risks": "Retries must return the original result rather than fail or issue another credit.",
+      "validation": "Call cancellation twice concurrently and sequentially; exactly one ledger credit must exist."
+    }
+  ],
+  "stats": {
+    "total": 1,
+    "exploitable": 1,
+    "mitigated": 0,
+    "not_a_risk": 0,
+    "undetermined": 0,
+    "severity_counts": {"Critical": 0, "High": 1, "Medium": 0, "Low": 0}
+  }
+}

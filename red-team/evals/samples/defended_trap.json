@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "coverage": {
+    "assessed": [{"zone": "downloads", "files": ["downloads.py"]}],
+    "skipped": [],
+    "limitations": []
+  },
+  "paths": [
+    {
+      "id": "ATTACK-DOWNLOAD-1",
+      "title": "Suspicious path join is constrained by two controls",
+      "severity": "Medium",
+      "persona": "Unauthenticated outsider",
+      "asset": "Files outside the public download directory",
+      "entry_point": {"file": "downloads.py", "line": 10},
+      "sink": {"file": "downloads.py", "line": 14},
+      "category": "injection",
+      "precondition": "The attacker supplies a path that survives validation.",
+      "steps": ["The basename check rejects separators and the allowlist rejects every other name."],
+      "evidence": ["basename != name", "basename not in PUBLIC_FILES"],
+      "impact": "None with the current controls.",
+      "mitigations": ["Keep both canonical-name validation and the allowlist."],
+      "zone": "downloads",
+      "capabilities_required": [],
+      "capabilities_gained": [],
+      "chain_links": [],
+      "verdict": "MITIGATED",
+      "analysis": "The sink is dangerous in isolation, but no attacker-controlled path reaches it.",
+      "confidence": 98,
+      "true_severity": "Low",
+      "defense": "Basename equality plus PUBLIC_FILES allowlist; removing either control would be fragile.",
+      "remediation": "Retain both checks and add traversal regression tests.",
+      "remediation_complexity": "Trivial",
+      "remediation_risks": "None identified.",
+      "validation": "Reject ../guide.txt, nested/guide.txt, and an unlisted basename."
+    }
+  ],
+  "stats": {
+    "total": 1,
+    "exploitable": 0,
+    "mitigated": 1,
+    "not_a_risk": 0,
+    "undetermined": 0,
+    "severity_counts": {"Critical": 0, "High": 0, "Medium": 0, "Low": 1}
+  }
+}

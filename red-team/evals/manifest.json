@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "description": "Development-only red-team benchmarks. Paths and lines are relative to each externalized fixture; all secrets and hosts are synthetic.",
+  "line_tolerance": 4,
+  "scenarios": {
+    "reachable_chain": {
+      "fixture": "fixtures/reachable_chain",
+      "coverage": {
+        "required_files": [
+          "app/routes.py",
+          "app/tenant.py",
+          "app/reports.py"
+        ]
+      },
+      "paths": [
+        {
+          "id": "CHAIN-01",
+          "kind": "exploitable",
+          "verdict": "EXPLOITABLE",
+          "severity": "High",
+          "entry_point": {"file": "app/routes.py", "line": 6},
+          "sink": {"file": "app/reports.py", "line": 10},
+          "required_chain_files": [
+            "app/routes.py",
+            "app/tenant.py",
+            "app/reports.py"
+          ],
+          "description": "A low-privilege user supplies another tenant ID; the route, tenant resolver, and report store form a reachable cross-tenant read chain."
+        },
+        {
+          "id": "CHAIN-02",
+          "kind": "exploitable",
+          "verdict": "EXPLOITABLE",
+          "severity": "High",
+          "entry_point": {"file": "app/routes.py", "line": 8},
+          "sink": {"file": "app/reports.py", "line": 10},
+          "required_chain_files": ["app/routes.py", "app/reports.py"],
+          "description": "Attacker-controlled tenant and report path components reach file reading without absolute-path, traversal, or resolved-containment checks, permitting local text-file disclosure outside the report root."
+        },
+        {
+          "id": "CHAIN-03",
+          "kind": "exploitable",
+          "verdict": "EXPLOITABLE",
+          "severity": "High",
+          "entry_point": {"file": "app/routes.py", "line": 8},
+          "sink": {"file": "app/reports.py", "line": 10},
+          "required_chain_files": ["app/routes.py", "app/reports.py"],
+          "description": "Absolute-path selection reaches unbounded file reading; a readable endless or very large input can block a worker and exhaust process memory without a byte limit, regular-file check, timeout, or cancellation."
+        }
+      ]
+    },
+    "defended_trap": {
+      "fixture": "fixtures/defended_trap",
+      "coverage": {
+        "required_files": ["downloads.py"]
+      },
+      "paths": [
+        {
+          "id": "TRAP-DEFENDED-01",
+          "kind": "trap",
+          "verdict": "MITIGATED",
+          "entry_point": {"file": "downloads.py", "line": 9},
+          "sink": {"file": "downloads.py", "line": 14},
+          "description": "The file read looks traversable, but basename normalization and an explicit public-file allowlist stop attacker-selected paths."
+        }
+      ]
+    },
+    "unreachable_sink": {
+      "fixture": "fixtures/unreachable_sink",
+      "coverage": {
+        "required_files": ["main.py", "legacy_debug.py"]
+      },
+      "paths": [
+        {
+          "id": "TRAP-UNREACHABLE-01",
+          "kind": "trap",
+          "verdict": "NOT_A_RISK",
+          "entry_point": {"file": "legacy_debug.py", "line": 5},
+          "sink": {"file": "legacy_debug.py", "line": 6},
+          "description": "The shell sink has no import or call route from the production entry point and is unreachable by an in-scope persona."
+        }
+      ]
+    },
+    "workflow_abuse": {
+      "fixture": "fixtures/workflow_abuse",
+      "coverage": {
+        "required_files": ["orders.py", "ledger.py"]
+      },
+      "paths": [
+        {
+          "id": "WORKFLOW-01",
+          "kind": "exploitable",
+          "verdict": "EXPLOITABLE",
+          "severity": "High",
+          "entry_point": {"file": "orders.py", "line": 6},
+          "sink": {"file": "ledger.py", "line": 8},
+          "required_chain_files": ["orders.py", "ledger.py"],
+          "description": "Replaying cancellation credits the same order repeatedly because the transition does not enforce a PENDING to CANCELLED state invariant."
+        }
+      ]
+    },
+    "supply_chain_only": {
+      "fixture": "fixtures/supply_chain_only",
+      "coverage": {
+        "required_files": ["requirements.txt"]
+      },
+      "paths": [
+        {
+          "id": "SUPPLY-01",
+          "kind": "exploitable",
+          "verdict": "EXPLOITABLE",
+          "severity": "Medium",
+          "entry_point": {"file": "requirements.txt", "line": 1},
+          "sink": {"file": "requirements.txt", "line": 1},
+          "required_chain_files": ["requirements.txt"],
+          "description": "The only changed surface is dependency configuration; cleartext HTTP package transport permits a network-positioned attacker to replace installed code."
+        },
+        {
+          "id": "SUPPLY-02",
+          "kind": "exploitable",
+          "verdict": "EXPLOITABLE",
+          "severity": "Medium",
+          "entry_point": {"file": "requirements.txt", "line": 1},
+          "sink": {"file": "requirements.txt", "line": 2},
+          "required_chain_files": ["requirements.txt"],
+          "description": "A compromised configured package index can substitute same-version artifacts because the exact version pin has no approved artifact hashes or hash-enforcement directive."
+        },
+        {
+          "id": "SUPPLY-03",
+          "kind": "exploitable",
+          "verdict": "EXPLOITABLE",
+          "severity": "Medium",
+          "entry_point": {"file": "requirements.txt", "line": 2},
+          "sink": {"file": "requirements.txt", "line": 2},
+          "required_chain_files": ["requirements.txt"],
+          "description": "Compromised project-specific publishing credentials can introduce a malicious same-version source distribution without transport or registry-wide compromise; no independent approved hash rejects it before build execution."
+        }
+      ]
+    },
+    "canary_secret": {
+      "fixture": "fixtures/canary_secret",
+      "coverage": {
+        "required_files": ["config.py", "client.py"]
+      },
+      "canary": {
+        "value": "rt-bench-canary-4c91f0a2d6b847e9",
+        "file": "config.py",
+        "line": 2
+      },
+      "paths": [
+        {
+          "id": "SECRET-01",
+          "kind": "exploitable",
+          "verdict": "EXPLOITABLE",
+          "severity": "Low",
+          "entry_point": {"file": "config.py", "line": 2},
+          "sink": {"file": "client.py", "line": 6},
+          "required_chain_files": ["config.py", "client.py"],
+          "description": "A synthetic credential committed in config.py is actively used by client.py. Reports must identify the exposure without reproducing its value."
+        }
+      ]
+    }
+  }
+}
