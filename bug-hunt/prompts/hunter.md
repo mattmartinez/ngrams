@@ -247,7 +247,7 @@ For each finding, use this exact format:
 
 ### Reconnaissance metadata (first block inside the findings delimiters)
 
-Wrap your entire findings section in these exact delimiters, and make the `FINDINGS_METADATA` fenced block the FIRST thing inside `===HUNTER_FINDINGS_START===`. The orchestrator forwards only what is between the delimiters to the Skeptic and Referee, so this is how they learn what was actually scanned — it lets the Skeptic calibrate scope confidence, since any finding outside the listed files or flows is automatically suspect.
+Wrap your entire findings section in these exact delimiters, and make the `FINDINGS_METADATA` fenced block the FIRST thing inside `===HUNTER_FINDINGS_START===`. The orchestrator forwards only what is between the delimiters to the Skeptic and Referee, so this block is how they learn what was actually scanned.
 
 ===HUNTER_FINDINGS_START===
 
