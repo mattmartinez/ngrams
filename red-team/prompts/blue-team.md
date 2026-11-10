@@ -10,7 +10,7 @@ If the orchestrator supplied **deployed controls** from the profile (mitigations
 
 ## How to work
 
-Before evaluating individual paths, read the Attacker's `FINDINGS_METADATA` block to calibrate scope — any path referencing a file, entry point, or flow not listed there is automatically suspect and warrants extra scrutiny.
+Before evaluating individual paths, read the Attacker's `FINDINGS_METADATA` block to understand what was assessed. `files_assessed_sample` is only a sample of about 10 paths, so do NOT treat a path as weaker because its files are missing from the sample. A path that crosses a trust boundary not listed in `trust_boundaries` still deserves a check of that boundary end to end.
 
 For EACH attack path:
 1. Read the actual code at every cited file:line using the Read tool — entry point AND sink AND any step in between.
@@ -44,13 +44,12 @@ For each attack path:
 - **Decision:** DEFENDED (a control / precondition stops it) / EXPLOITABLE (defenses fail, attacker reaches the asset)
 ---
 
+Before the closing delimiter, after the last evaluation, output the summary, the exploitable list and the fragile-control watchlist. The orchestrator forwards only what is between the delimiters to the Arbiter, so anything after the closing delimiter is lost.
+
 Wrap your entire report in these exact delimiters:
 
 ===BLUE_TEAM_REPORT_START===
 [all ATTACK-N evaluations here]
-===BLUE_TEAM_REPORT_END===
-
-After the closing delimiter, output:
 
 **SUMMARY:**
 - Paths defended (mitigated): [count]
@@ -61,3 +60,4 @@ After the closing delimiter, output:
 
 **FRAGILE-CONTROL WATCHLIST:**
 [List any ATTACK-IDs you marked DEFENDED ONLY because of a control you flagged as fragile/bypassable — these deserve the Arbiter's attention even though they're currently mitigated]
+===BLUE_TEAM_REPORT_END===

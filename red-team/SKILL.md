@@ -25,18 +25,9 @@ The assessment target is: $ARGUMENTS
 Supported target formats:
 - **Directory path:** Assess all source/config in the directory
 - **File path:** Assess a single file
-- **`--diff`:** Assess only files changed vs the default branch
-  ```bash
-  base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#origin/##'); git diff --name-only $(git merge-base HEAD "${base:-main}")..HEAD
-  ```
+- **`--diff`:** Assess only files changed vs the default branch (from the merge-base to HEAD)
 - **`--commit [sha]`:** Assess only files changed in a specific commit
-  ```bash
-  git diff --name-only [sha]^..[sha]
-  ```
 - **`--pr [number]`:** Assess files changed in a GitHub PR (requires gh CLI)
-  ```bash
-  gh pr diff [number] --name-only
-  ```
 
 When in diff mode, the Attacker should focus on the CHANGED lines but read surrounding context to understand the full attack surface. Pay extra attention to:
 - New entry points, routes, parameters, or permissions introduced by the change
@@ -49,6 +40,8 @@ If no target was specified, assess the current working directory.
 
 Follow these steps in exact order. Each agent runs as a separate subagent to ensure context isolation.
 
+**Marker rule (applies to the Attacker, Blue Team and Arbiter).** Each agent must wrap its result in its start and end markers. If a reply lacks either marker, run that stage once more with the same input. If the second reply also lacks them, stop and tell the user which stage failed. With parallel Attackers, re-run only the Attacker that failed.
+
 ### Step 1: Read the prompt files
 
 Read these files using the skill directory variable:
@@ -56,28 +49,35 @@ Read these files using the skill directory variable:
 - `${CLAUDE_SKILL_DIR}/prompts/blue-team.md`
 - `${CLAUDE_SKILL_DIR}/prompts/arbiter.md`
 
-### Step 1.1: Load profile (if present)
+### Step 1.1: Resolve the target
 
-Search for a `.red-team-profile.md` file by walking up from the assessment target directory:
+Run this script. Run it, do not read it.
 
 ```bash
-# For a path target, start from its absolute location; for --diff/--commit/--pr
-# (which are flags, not paths) start the walk from the repo root, else cwd.
-if [ -e "[target]" ]; then
-  dir="$(cd "[target]" 2>/dev/null && pwd || cd "$(dirname "[target]")" 2>/dev/null && pwd || echo /)"
-else
-  dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-fi
-while [ "$dir" != "/" ]; do
-  if [ -f "$dir/.red-team-profile.md" ]; then
-    echo "Found profile: $dir/.red-team-profile.md"
-    break
-  fi
-  prev="$dir"; dir="$(dirname "$dir")"; [ "$dir" = "$prev" ] && break
-done
+python3 ${CLAUDE_SKILL_DIR}/scripts/resolve_target.py --profile-name .red-team-profile.md --ext ts,js,py,go,rs,rb,java,swift,kt,c,cpp,h,tf,yaml,yml,sql --name Dockerfile -- <target>
 ```
 
-If found, read the profile file. The profile contains:
+`<target>` is the assessment target given above, in one of the supported formats: a path (quote it if it has spaces), `--diff`, `--commit <sha>`, `--pr <number>`, or nothing at all for the current directory. If the user described the target in words instead of giving a path, find the folder or file they mean first and pass that path.
+
+It prints one JSON object on stdout and logs its steps to stderr. It never changes the working tree. The fields this skill uses:
+- `mode`: `path`, `diff`, `commit` or `pr`.
+- `target`: the absolute path assessed in path mode; null in the diff modes.
+- `repo_root`: the git repository root, or null.
+- `file_count`: how many source and config files are in scope, after skipping tests, specs and `node_modules`, `vendor`, `dist`, `__pycache__` and `.git`.
+- `files_list`: a text file with one in-scope file per line.
+- `diff_file`: in the three diff modes, the saved unified diff; null in path mode.
+- `checked_out`: whether the files under review match what is checked out. HEAD may differ from the commit under review if those files are unchanged since it. `head` is the current commit, `expected_head` the commit under review. Null in path mode.
+- `profile`: the absolute path of the nearest `.red-team-profile.md` above the target, or null.
+- `notes`: plain-language warnings, such as how many changed files the filters skipped. Pass them on to the user.
+- `base`, `commit`, `pr`: the base branch, commit or PR number, when relevant.
+
+**If the script exits with code 2:** show its error message to the user and stop.
+
+**If `checked_out` is false:** stop before launching any agent. Tell the user in one or two plain sentences what is checked out and what is under review. Give the command that fixes it: `gh pr checkout <n>` for a PR; for a commit, check that commit out, or re-run on the current code. Never change the working tree yourself.
+
+### Step 1.2: Load profile (if present)
+
+If `profile` is set, read that file. The profile contains:
 - **Crown jewels** — the specific assets this project must protect (e.g., "customer PII in `users` table", "the signing key", "ability to move funds"). The Attacker treats reaching these as the highest-value objective.
 - **In-scope attacker personas** — which threat actors are realistic for this deployment (e.g., "unauthenticated internet", "authenticated low-privilege tenant", "compromised CI runner"). Out-of-scope personas (e.g., "physical access", "malicious root") can be declared so the Attacker doesn't waste budget on them.
 - **Deployed controls** — mitigations that exist *outside the code* and should inform the Blue Team (e.g., "WAF strips `../`", "service runs in a network-isolated VPC", "secrets injected at runtime, never in repo").
@@ -93,23 +93,11 @@ If found, read the profile file. The profile contains:
 
 **Resolve the target file list:**
 
-If the target uses `--diff`, `--commit`, or `--pr`, run the appropriate git/gh command to get the list of changed files. Pass this explicit file list to the Attacker instead of a directory.
+If the target uses `--diff`, `--commit`, or `--pr`, pass the explicit file list from `files_list` to the Attacker instead of a directory. Also pass the path in `diff_file`, and tell the Attacker to read the diff first, then the surrounding code.
 
-**If the resolved file list is empty:** Report "no attack surface in scope" immediately and skip directly to Step 5. No agents need to run — a `--diff` with no changes is a no-op assessment, not a secure system.
+**If `file_count` is 0:** Report "no attack surface in scope" immediately and skip directly to Step 5. No agents need to run — a `--diff` with no changes is a no-op assessment, not a secure system.
 
-**Count source/config files in the target:**
-
-```bash
-find [target] -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" \
-  -o -name "*.go" -o -name "*.rs" -o -name "*.rb" -o -name "*.java" \
-  -o -name "*.swift" -o -name "*.kt" -o -name "*.c" -o -name "*.cpp" \
-  -o -name "*.h" -o -name "*.tf" -o -name "*.yaml" -o -name "*.yml" \
-  -o -name "Dockerfile" -o -name "*.sql" \) | grep -v node_modules | \
-  grep -v vendor | grep -v dist | grep -v __pycache__ | \
-  grep -v '.test.' | grep -v '.spec.' | wc -l
-```
-
-In `--diff`/`--commit`/`--pr` modes, skip the `find` — the file count is the length of the resolved changed-file list; pipe that list through the same exclusion greps, then `wc -l`.
+**Use `file_count` to size the assessment:**
 
 - **If > 50 files:** Run multiple Attacker agents in parallel by dispatching multiple Agent calls in parallel, each assigned a different **trust zone or entry-point class** (e.g., one for the public API surface, one for auth/session, one for data access, one for infra/CI/config). Merge their attack paths before passing to the Blue Team.
 - **If > 150 files:** Run a quick recon agent first to map entry points and trust boundaries, then assign Attackers only to the highest-value zones (anything reachable by an unauthenticated or low-privilege persona, and anything adjacent to a crown jewel).
@@ -119,13 +107,13 @@ In `--diff`/`--commit`/`--pr` modes, skip the `find` — the file count is the l
 **Detect the project stack and shape:**
 
 ```bash
-ls [target]/package.json [target]/tsconfig.json [target]/Cargo.toml \
-   [target]/go.mod [target]/pyproject.toml [target]/requirements.txt \
-   [target]/Gemfile [target]/pom.xml [target]/Package.swift \
-   [target]/Dockerfile [target]/*.tf [target]/openapi.* 2>/dev/null
+ls <dir>/package.json <dir>/tsconfig.json <dir>/Cargo.toml \
+   <dir>/go.mod <dir>/pyproject.toml <dir>/requirements.txt \
+   <dir>/Gemfile <dir>/pom.xml <dir>/Package.swift \
+   <dir>/Dockerfile <dir>/*.tf <dir>/openapi.* 2>/dev/null
 ```
 
-In `--diff`/`--commit`/`--pr` modes `[target]` is a flag, not a directory — run this `ls` against the repo root (`git rev-parse --show-toplevel`), not the changed files, since project shape is a property of the repo rather than the diff.
+`<dir>` is `target` in path mode (for a single file, its folder), and `repo_root` in the diff modes.
 
 Determine the **project shape** — this decides which attack surfaces dominate:
 network service / web app, CLI or desktop tool, library / SDK, long-running daemon, data pipeline / batch job, infrastructure-as-code. Append the relevant shape-specific surface checklist to the Attacker's task (see `attacker.md`). A project can have more than one shape (e.g., a service that also ships a CLI) — include all that apply.
@@ -133,7 +121,7 @@ network service / web app, CLI or desktop tool, library / SDK, long-running daem
 ### Step 2: Run the Attacker Agent
 
 Dispatch a new isolated Agent subagent (subagent_type: general-purpose) — or multiple parallel Agent calls for large codebases:
-- task: Include the attacker prompt text AND the assessment target path AND the detected project shape(s) AND any profile crown jewels/personas and severity overrides. The Attacker must use tools (Read, Bash with find/grep) to examine actual code — it may not speculate about files it hasn't read.
+- task: Include the attacker prompt text AND the assessment target path AND the detected project shape(s) AND any profile crown jewels/personas and severity overrides. In the diff modes, also include the `files_list` and the `diff_file` path with the instruction to read the diff first and then the surrounding code. The Attacker must use tools (Read, Bash with find/grep) to examine actual code — it may not speculate about files it hasn't read.
 
 **Parallel-attacker ATTACK-ID namespacing:** When running multiple Attackers in parallel (per the Step 1.5 thresholds), assign each a distinct ATTACK-ID prefix so paths remain unique across the merge:
 
@@ -145,7 +133,7 @@ Append the assigned prefix and the agent's assigned trust zone to each Attacker'
 
 In single-Attacker mode, no prefix is assigned and it uses default `ATTACK-1`, `ATTACK-2`, … numbering.
 
-Wait for the Attacker to complete and capture its full output. Extract the content between `===ATTACKER_FINDINGS_START===` and `===ATTACKER_FINDINGS_END===`. This is the structured attack-path payload.
+Wait for the Attacker to complete and capture its full output. Extract the content between `===ATTACKER_FINDINGS_START===` and `===ATTACKER_FINDINGS_END===`. This is the structured attack-path payload. If either marker is missing, apply the marker rule.
 
 ### Step 2b: Check for findings
 
@@ -158,7 +146,7 @@ Dispatch a new isolated Agent subagent (subagent_type: general-purpose):
 
 The Blue Team is the defender. It must independently read the code and rule each path **DEFENDED** or **EXPLOITABLE**: are the preconditions satisfiable by the named persona? Does an existing control (auth check, validation, sandbox, network boundary, rate limit) stop a link in the chain? Is the asset actually reachable?
 
-Extract the content between `===BLUE_TEAM_REPORT_START===` and `===BLUE_TEAM_REPORT_END===`.
+Extract the content between `===BLUE_TEAM_REPORT_START===` and `===BLUE_TEAM_REPORT_END===`. If either marker is missing, apply the marker rule.
 
 ### Step 4: Run the Arbiter Agent
 
@@ -169,16 +157,27 @@ Dispatch a new isolated Agent subagent (subagent_type: general-purpose):
 
 The Arbiter must independently read the code to make final judgments on exploitability, severity, and remediation.
 
-### Step 5: Present the Final Report
+Extract the content between `===ARBITER_REPORT_START===` and `===ARBITER_REPORT_END===` delimiters. If either marker is missing, apply the marker rule.
 
-Display the Arbiter's final verified assessment to the user. The report must use the detailed format for Critical and High paths — each as its own section with **Attack path** (the kill chain), **Asset at risk**, **Why it's exploitable**, and **Remediation**. Lower-severity items can use a compact table.
+### Step 5: Give the short answer first
 
-Include:
-1. Summary stats (paths reported, mitigated, confirmed exploitable; counts by severity)
-2. Critical paths (detailed format, each as its own subsection)
-3. High paths (detailed format)
-4. Medium/Low paths (compact table)
-5. Theoretical-but-not-currently-exploitable items flagged for awareness (e.g., one control away from being live)
-6. A collapsed section with dismissed paths and *why a control defeats them* (this is itself useful — it documents what's protecting you)
+If you skipped to this step because no files were in scope or the Attacker found no paths, there is no Arbiter report: say so in one line and stop.
 
-If zero exploitable paths were confirmed, say so clearly — and surface the dismissed-paths section prominently, because "here is the attack we tried and the control that stopped it" is the most valuable output of a clean red team.
+Otherwise take only the text between `===ARBITER_REPORT_START===` and `===ARBITER_REPORT_END===`. Keep it in context; do not print it.
+
+Reply in chat with:
+1. One line of counts: paths reported, mitigated, dismissed, confirmed exploitable (Critical / High / Medium / Low).
+2. A numbered list of the exploitable paths, worst first, one line each, at most 10:
+   `1. api/upload.py:88 · anyone logged in can read another user's files by changing the id in the URL · Critical`
+   Give the `file:line` where the path starts when the Arbiter's entry has one; otherwise name the entry point.
+3. If there are more than 10, one more line per severity that groups the rest.
+4. One line naming any mitigated path that is one control away from being live (the fragile controls in the "Mitigated" section).
+5. One closing sentence: "Say 'look at 2' for the attack path and a fix, 'what stopped the rest' for the paths that were blocked, or 'full report' for everything."
+
+Write no file unless asked. If zero paths were confirmed exploitable, say so plainly, then list each attack that was tried and the control that stopped it, one line apiece. That list is the most useful output of a clean assessment.
+
+**"Look at N."** Print a card for that path from the Arbiter's entry: **Attack path** (the steps, in plain words), **Asset at risk**, **Why it works**, **Fix**, **How to check it worked** (a test to add or a command to run; say when this is your suggestion and not the Arbiter's), then the evidence. Plain words, short sentences.
+
+**"What stopped the rest."** List the mitigated and dismissed paths with the control that defeats each.
+
+**"Full report."** Print the Arbiter's report as written.

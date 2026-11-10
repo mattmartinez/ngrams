@@ -172,7 +172,7 @@ For each attack path, use this exact format:
 
 ### Reconnaissance metadata (emit as the first block inside the findings delimiters)
 
-As the first block inside the `===ATTACKER_FINDINGS_START===` / `===ATTACKER_FINDINGS_END===` delimiters, emit a `FINDINGS_METADATA` fenced block so the Blue Team and Arbiter know what was actually assessed and can calibrate scope confidence — any path referencing a file or flow outside this list is automatically suspect.
+As the first block inside the `===ATTACKER_FINDINGS_START===` / `===ATTACKER_FINDINGS_END===` delimiters, emit a `FINDINGS_METADATA` fenced block. The orchestrator forwards only what is between the delimiters to the Blue Team and Arbiter, so this block is how they learn what was actually assessed.
 
 ```findings-metadata
 shape:                <detected project shape(s), e.g. "network service + CLI">
