@@ -67,48 +67,14 @@
       "remediation_complexity": "Moderate",
       "remediation_risks": "Hash coverage must include transitive dependencies and supported artifact variants or legitimate installs can fail.",
       "validation": "Serve different bytes under the pinned version in a controlled fixture and require a hash mismatch to stop installation."
-    },
-    {
-      "id": "ATTACK-SUPPLY-3",
-      "title": "Publisher compromise introduces a malicious same-version build",
-      "severity": "Medium",
-      "persona": "Attacker with compromised project-specific publishing credentials",
-      "asset": "Build-account execution and installed dependency integrity",
-      "entry_point": {"file": "requirements.txt", "line": 2},
-      "sink": {"file": "requirements.txt", "line": 2},
-      "category": "supply-chain",
-      "precondition": "The attacker can publish a malicious same-version source distribution that pip later selects and builds.",
-      "steps": [
-        "requirements.txt:2 requests an externally published version without an approved digest.",
-        "The compromised publisher supplies a malicious same-version source distribution whose build backend executes during installation."
-      ],
-      "evidence": ["The manifest has no independent approved hash to distinguish publisher-controlled replacement bytes."],
-      "impact": "Attacker-controlled build commands execute as the dependency-installing account and the installed package is compromised.",
-      "mitigations": ["Transport encryption and an otherwise honest registry do not reject artifacts from a compromised publisher."],
-      "zone": "dependency-build",
-      "capabilities_required": ["Project-specific publishing access and a later source-distribution installation"],
-      "capabilities_gained": ["Execute build-backend commands as the installation account"],
-      "chain_links": [
-        {"file": "requirements.txt", "line": 2, "role": "unverified publisher artifact request"},
-        {"file": "requirements.txt", "line": 2, "role": "source build execution sink"}
-      ],
-      "verdict": "EXPLOITABLE",
-      "analysis": "This publisher-specific route requires neither network interception nor registry-wide compromise and remains undetected without independent hashes.",
-      "confidence": 96,
-      "true_severity": "Medium",
-      "defense": "No approved artifact digest is enforced before building the publisher-supplied distribution.",
-      "remediation": "Require independently reviewed hashes and immutable publishing controls with scoped credentials and audit review.",
-      "remediation_complexity": "Moderate",
-      "remediation_risks": "Hash review and immutable retention must preserve legitimate releases, rollbacks, and emergency publishing workflows.",
-      "validation": "Confirm a publisher-supplied artifact with an unapproved digest is rejected before its build backend executes."
     }
   ],
   "stats": {
-    "total": 3,
-    "exploitable": 3,
+    "total": 2,
+    "exploitable": 2,
     "mitigated": 0,
     "not_a_risk": 0,
     "undetermined": 0,
-    "severity_counts": {"Critical": 0, "High": 0, "Medium": 3, "Low": 0}
+    "severity_counts": {"Critical": 0, "High": 0, "Medium": 2, "Low": 0}
   }
 }

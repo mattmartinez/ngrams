@@ -123,17 +123,7 @@
           "entry_point": {"file": "requirements.txt", "line": 1},
           "sink": {"file": "requirements.txt", "line": 2},
           "required_chain_files": ["requirements.txt"],
-          "description": "A compromised configured package index can substitute same-version artifacts because the exact version pin has no approved artifact hashes or hash-enforcement directive."
-        },
-        {
-          "id": "SUPPLY-03",
-          "kind": "exploitable",
-          "verdict": "EXPLOITABLE",
-          "severity": "Medium",
-          "entry_point": {"file": "requirements.txt", "line": 2},
-          "sink": {"file": "requirements.txt", "line": 2},
-          "required_chain_files": ["requirements.txt"],
-          "description": "Compromised project-specific publishing credentials can introduce a malicious same-version source distribution without transport or registry-wide compromise; no independent approved hash rejects it before build execution."
+          "description": "Compromised registry, artifact-store, or project-publishing controls can substitute same-version artifacts because the exact version pin has no approved artifact hashes or hash-enforcement directive."
         }
       ]
     },
