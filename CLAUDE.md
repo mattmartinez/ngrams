@@ -1,6 +1,6 @@
 # ngrams: working rules
 
-A library of Claude Code skills. Each top-level folder that holds a `SKILL.md` is one skill and installs on its own. `agents/` holds subagent definitions, one Markdown file each. Folders ending in `-workspace/` are private scratch space and are gitignored.
+A library of Claude Code skills. Each top-level folder that holds a `SKILL.md` is one skill and installs on its own. `agents/` holds subagent definitions, one Markdown file each. `settings/` holds an example `settings.json` and its status line script; nothing installs them. Folders ending in `-workspace/` are private scratch space and are gitignored.
 
 ## Rules
 

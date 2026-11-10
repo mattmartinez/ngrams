@@ -453,6 +453,35 @@ sys.exit(0 if r == 1.0 and c == 0 else 1)
   fi
 }
 
+# 8. Settings example: settings/settings.json is valid JSON and statusline.sh parses.
+check_settings_example() {
+  log "check 8: settings example"
+  local name="settings example" json="settings/settings.json" sh="settings/statusline.sh"
+  local det="$TMP/settings.detail" out="$TMP/settings.out"
+  if [[ ! -d settings ]]; then
+    skip "$name (settings/ not present)"
+    return
+  fi
+  : > "$det"
+  if [[ ! -f "$json" ]]; then
+    echo "missing: $json" >> "$det"
+  else
+    log "  python3 -I json.load $json"
+    if ! python3 -I -c 'import json, sys; json.load(open(sys.argv[1]))' "$json" > "$out" 2>&1; then
+      { echo "$json is not valid JSON:"; tail -n 3 "$out"; } >> "$det"
+    fi
+  fi
+  if [[ ! -f "$sh" ]]; then
+    echo "missing: $sh" >> "$det"
+  else
+    log "  $BASH_CMD -n $sh"
+    if ! "$BASH_CMD" -n "$sh" > "$out" 2>&1; then
+      { echo "$BASH_CMD -n $sh failed:"; tail -n 10 "$out"; } >> "$det"
+    fi
+  fi
+  if [[ -s "$det" ]]; then fail "$name" "$det"; else pass "$name"; fi
+}
+
 check_unit_tests
 check_installer
 check_red_team_installed
@@ -460,6 +489,7 @@ check_readme
 check_shared_scripts
 check_private_words
 check_queryquant_scan
+check_settings_example
 
 TOTAL=$((N_OK + N_SKIP + N_FAIL))
 if [[ $N_FAIL -eq 0 ]]; then

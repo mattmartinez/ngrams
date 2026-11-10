@@ -47,6 +47,23 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 
 Each agent is one Markdown file in [agents/](agents/), written as a Claude Code subagent definition.
 
+## Settings
+
+[settings/](settings/) holds an example Claude Code `settings.json` and the status line script it points at. `install.sh` does not install them: a settings file has to be merged into your own by hand, not overwritten.
+
+| File | What it is |
+|---|---|
+| **settings.json** | Example user settings. `advisorModel` gives the main model an `advisor` tool: when the model calls it, the whole conversation goes to that stronger model for a second opinion. The file also sets the main model, effort levels, two `PreToolUse` hooks, two plugins and the status line. |
+| **statusline.sh** | Prints account email · model · working folder. Copy it to `~/.claude/statusline.sh`, which is where the example settings look for it. |
+
+Before you copy anything from it:
+
+- The example runs in `auto` permission mode and skips two confirmation prompts. Leave those keys out if you want the prompts.
+- The `Bash` hook needs `rtk` on your `PATH`, the `Edit|Write` hook needs `node`, and the status line needs `jq`. Leave out what you don't use.
+- The `researcher` agent uses the tools of the `context7` plugin that the example enables.
+- Values that belong to one machine are left out on purpose. Put your own in an `env` block in your local settings.
+- To show one mail domain as "work" in the status line, export `STATUSLINE_WORK_DOMAIN` (for example `example.com`) in your shell profile.
+
 ## Install
 
 `install.sh` copies skills from this repo into a skills directory. `~/.claude/skills` is the default for [Claude Code](https://claude.com/claude-code); point it elsewhere if your harness uses a different location.
