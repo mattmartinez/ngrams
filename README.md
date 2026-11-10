@@ -38,6 +38,15 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 | **red-team** | Adversarial three-stage attack-path assessment (Attacker → Blue Team → Arbiter) with independent coverage synthesis. Maps realistic attack chains, checks exploitability from source, and reports residual uncertainty and coverage. Static and read-only across services, CLIs, libraries, daemons, data pipelines, and IaC. |
 | **slidedeck** | Build polished, self-contained HTML slide deck presentations from source material |
 
+## Agents
+
+| Agent | Purpose |
+|---|---|
+| **researcher** | Pulls current docs for a library, API, CLI or cloud service and quotes the exact guidance with sources. Never edits. |
+| **worker** | Makes independent, scoped changes that can run in parallel, runs the repo's verify command and reports the real output. |
+
+Each agent is one Markdown file in [agents/](agents/), written as a Claude Code subagent definition.
+
 ## Install
 
 `install.sh` copies skills from this repo into a skills directory. `~/.claude/skills` is the default for [Claude Code](https://claude.com/claude-code); point it elsewhere if your harness uses a different location.
@@ -45,12 +54,15 @@ No dependencies beyond the Python 3 standard library. In live mode a per-model u
 ```bash
 ./install.sh ~/.claude/skills                   # report only: shows what would change, changes nothing
 ./install.sh ~/.claude/skills bug-hunt mdthis   # install the skills you name
-./install.sh ~/.claude/skills --all             # install every skill in this repo
+./install.sh ~/.claude/skills agents            # install the agent files into ~/.claude/agents
+./install.sh ~/.claude/skills --all             # install every skill and the agent files
 ```
 
 > **Note:** A skill is any top-level folder here that holds a `SKILL.md`. Installing a skill makes the target folder an exact copy: files there that are not in this repo are deleted. Run the report first if the target might already hold a skill of the same name from somewhere else. A target that is a symlink is skipped, never replaced.
 >
 > Edits in this repo are inert until you install the skill again. The copy is one-way (repo → target).
+>
+> Agent files go into the `agents` folder beside the skills directory. If a file of the same name is already there with different content, the installer first copies it to `<file>.bak-<date>-<time>` in the same folder, then replaces it. Other files in that folder are never touched, and a target file that is a symlink is skipped.
 
 ### Red team: static attack-path assessment
 

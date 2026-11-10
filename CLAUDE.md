@@ -1,6 +1,6 @@
 # ngrams: working rules
 
-A library of Claude Code skills. Each top-level folder that holds a `SKILL.md` is one skill and installs on its own. Folders ending in `-workspace/` are private scratch space and are gitignored.
+A library of Claude Code skills. Each top-level folder that holds a `SKILL.md` is one skill and installs on its own. `agents/` holds subagent definitions, one Markdown file each. Folders ending in `-workspace/` are private scratch space and are gitignored.
 
 ## Rules
 
@@ -28,6 +28,7 @@ To guard against private words, put one regular expression per line in a local `
 ```bash
 ./install.sh ~/.claude/skills               # report only: changes nothing
 ./install.sh ~/.claude/skills <skill> ...   # install the skills you name
+./install.sh ~/.claude/skills agents        # install the agent files into ~/.claude/agents
 ```
 
-Edits here are inert until the skill is installed again. Use `--all` only on a machine where nothing else provides a skill of the same name.
+Edits here are inert until the skill or agent file is installed again. Use `--all` only on a machine where nothing else provides a skill of the same name; it also installs the agent files. An agent file that is about to be replaced is first copied to `<file>.bak-<date>-<time>` beside it. The backup name must not end in `.md`, or the harness could load it as a second agent of the same name.

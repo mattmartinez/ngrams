@@ -84,12 +84,15 @@ check_unit_tests() {
   done
 }
 
-# 2. Installer: syntax, --all, report mode changes nothing, symlink kept, unknown name.
+# 2. Installer: syntax, --all, report mode changes nothing, symlink kept, unknown name,
+#    agent files (copied beside the target, backed up before a replace).
 check_installer() {
   log "check 2: installer"
   local name="installer" det="$TMP/inst.detail" out="$TMP/inst.out" rc
   local t="$TMP/t" want="$TMP/want.txt" got="$TMP/got.txt"
   local skills=() s first second
+  local agents=() a af as2 n bak
+  local ta="$TMP/agents-test/skills" ad="$TMP/agents-test/agents" rep="$TMP/agents.report"
   : > "$det"
 
   if [[ -x /bin/bash ]]; then
@@ -162,6 +165,136 @@ check_installer() {
   log "  d. exit=$rc"
   if [[ $rc -ne 2 ]]; then
     { echo "d. unknown skill name exited $rc, want 2:"; tail -n 10 "$out"; } >> "$det"
+  fi
+
+  # e-h. Agent files install into the "agents" folder beside the target.
+  for a in agents/*.md; do
+    if [[ -f "$a" ]]; then agents+=("${a#agents/}"); fi
+  done
+  log "  agent files in repo: ${agents[*]:-none}"
+  if [[ ${#agents[@]} -eq 0 ]]; then
+    log "  no agent files in this repo; agent checks not run"
+  else
+    # Step a ran --all on $t, so the agent files must now sit beside it.
+    for a in "${agents[@]}"; do
+      if ! cmp -s "agents/$a" "$TMP/agents/$a"; then
+        echo "a. --all did not install agent file $a beside the target" >> "$det"
+      fi
+    done
+
+    # e. Report mode on a fresh target creates nothing.
+    log "  e. $BASH_CMD install.sh $ta (report mode, fresh target)"
+    "$BASH_CMD" install.sh "$ta" > "$out" 2>&1
+    rc=$?
+    log "  e. exit=$rc"
+    if [[ $rc -ne 0 ]]; then
+      { echo "e. report mode on a fresh target exited $rc:"; tail -n 10 "$out"; } >> "$det"
+    fi
+    if [[ -e "$TMP/agents-test" ]]; then
+      echo "e. report mode created $TMP/agents-test" >> "$det"
+    fi
+
+    # f. The name "agents" copies every agent file, makes no backup, installs no skill.
+    log "  f. $BASH_CMD install.sh $ta agents"
+    "$BASH_CMD" install.sh "$ta" agents > "$out" 2>&1
+    rc=$?
+    log "  f. exit=$rc"
+    if [[ $rc -ne 0 ]]; then
+      { echo "f. install agents exited $rc:"; tail -n 10 "$out"; } >> "$det"
+    fi
+    for a in "${agents[@]}"; do
+      if ! cmp -s "agents/$a" "$ad/$a"; then
+        echo "f. agent file $a is missing or differs after install" >> "$det"
+      fi
+    done
+    n="$(find "$ad" -name '*.bak-*' 2>/dev/null | wc -l | tr -d ' ')"
+    if [[ "$n" != 0 ]]; then
+      echo "f. a fresh install made $n backup file(s), want 0" >> "$det"
+    fi
+    if [[ -e "$ta" ]]; then
+      echo "f. installing only agents created the skills folder $ta" >> "$det"
+    fi
+
+    # g. A changed file is backed up beside itself, then replaced. Report mode
+    #    changes nothing. A foreign file and a symlinked file are left alone.
+    af="${agents[0]}"
+    log "  g. plant: old content in $af, add zz-foreign.md"
+    echo "old content planted by check.sh" > "$ad/$af"
+    echo "foreign agent planted by check.sh" > "$ad/zz-foreign.md"
+    if [[ ${#agents[@]} -ge 2 ]]; then
+      as2="${agents[1]}"
+      log "  g. plant: symlink $as2"
+      echo "symlink target planted by check.sh" > "$TMP/agent-link-target.md"
+      rm -f "$ad/$as2"
+      ln -s "$TMP/agent-link-target.md" "$ad/$as2"
+    fi
+    cp -R "$ad" "$TMP/ad-copy"
+    log "  g. $BASH_CMD install.sh $ta (report mode)"
+    "$BASH_CMD" install.sh "$ta" > "$rep" 2>&1
+    rc=$?
+    log "  g. report exit=$rc"
+    if [[ $rc -ne 0 ]]; then
+      { echo "g. report mode exited $rc:"; tail -n 10 "$rep"; } >> "$det"
+    fi
+    if ! diff -r "$ad" "$TMP/ad-copy" > "$out" 2>&1; then
+      { echo "g. report mode changed the agents folder:"; tail -n 20 "$out"; } >> "$det"
+    fi
+    if ! grep -q -F "agents/$af: would replace" "$rep"; then
+      echo "g. report mode did not say it would replace $af" >> "$det"
+    fi
+
+    log "  g. $BASH_CMD install.sh $ta agents"
+    "$BASH_CMD" install.sh "$ta" agents > "$out" 2>&1
+    rc=$?
+    log "  g. install exit=$rc"
+    if [[ $rc -ne 0 ]]; then
+      { echo "g. install over a changed file exited $rc:"; tail -n 10 "$out"; } >> "$det"
+    fi
+    if ! cmp -s "agents/$af" "$ad/$af"; then
+      echo "g. the changed file $af was not replaced" >> "$det"
+    fi
+    find "$ad" -name '*.bak-*' > "$TMP/baks.txt" 2>/dev/null
+    n="$(wc -l < "$TMP/baks.txt" | tr -d ' ')"
+    if [[ "$n" != 1 ]]; then
+      { echo "g. want exactly 1 backup file, found $n:"; cat "$TMP/baks.txt"; } >> "$det"
+    else
+      bak="$(head -n 1 "$TMP/baks.txt")"
+      log "  g. backup file: $bak"
+      case "$bak" in
+        "$ad/$af".bak-*) ;;
+        *) echo "g. the backup is not beside $af: $bak" >> "$det" ;;
+      esac
+      case "$bak" in
+        *.md) echo "g. the backup name ends in .md: $bak" >> "$det" ;;
+      esac
+      if [[ "$(cat "$bak")" != "old content planted by check.sh" ]]; then
+        echo "g. the backup does not hold the old content: $bak" >> "$det"
+      fi
+    fi
+    if [[ "$(cat "$ad/zz-foreign.md" 2>/dev/null)" != "foreign agent planted by check.sh" ]]; then
+      echo "g. the foreign agent file was changed or removed" >> "$det"
+    fi
+    if [[ ${#agents[@]} -ge 2 ]]; then
+      if [[ ! -L "$ad/$as2" ]]; then
+        echo "g. $as2 is no longer a symlink after install" >> "$det"
+      fi
+      if [[ "$(cat "$TMP/agent-link-target.md" 2>/dev/null)" != "symlink target planted by check.sh" ]]; then
+        echo "g. the file behind the $as2 symlink was changed" >> "$det"
+      fi
+    fi
+
+    # h. Running it again makes no second backup.
+    log "  h. $BASH_CMD install.sh $ta agents (again)"
+    "$BASH_CMD" install.sh "$ta" agents > "$out" 2>&1
+    rc=$?
+    log "  h. exit=$rc"
+    if [[ $rc -ne 0 ]]; then
+      { echo "h. second install exited $rc:"; tail -n 10 "$out"; } >> "$det"
+    fi
+    n="$(find "$ad" -name '*.bak-*' 2>/dev/null | wc -l | tr -d ' ')"
+    if [[ "$n" != 1 ]]; then
+      echo "h. a rerun left $n backup file(s), want 1" >> "$det"
+    fi
   fi
 
   if [[ -s "$det" ]]; then fail "$name" "$det"; else pass "$name"; fi
